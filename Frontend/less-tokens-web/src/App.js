@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CSS } from "./shared.js";
-import HomeScreen from "./Homeccreen.js";
+import HomeScreen from "./Homescreen.js";
 import Tester from "./Tester.js";
 
 export default function App() {
