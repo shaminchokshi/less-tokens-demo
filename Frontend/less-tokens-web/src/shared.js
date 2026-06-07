@@ -3,7 +3,7 @@
 /* Where the FastAPI compression backend lives.
    Override at runtime with  window.LESS_TOKENS_API = "https://..." */
 export const API =
-  (typeof window !== "undefined" && window.LESS_TOKENS_API) || "http://localhost:8000";
+  (typeof window !== "undefined" && window.LESS_TOKENS_API) || "less-tokens-demo-production.up.railway.app";
 
 export const REPO = "https://github.com/shaminchokshi/less-tokens";
 export const PYPI = "https://pypi.org/project/less-tokens/";
