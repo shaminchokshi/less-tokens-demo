@@ -4,7 +4,7 @@
    Override at runtime with  window.LESS_TOKENS_API = "https://..." */
 export const API =
   (typeof window !== "undefined" && window.LESS_TOKENS_API) || "https://less-tokens-demo-production.up.railway.app";
-
+//"http://localhost:8000"
 export const REPO = "https://github.com/shaminchokshi/less-tokens";
 export const PYPI = "https://pypi.org/project/less-tokens/";
 export const ISSUES = "https://github.com/shaminchokshi/less-tokens/issues";
@@ -191,4 +191,40 @@ footer{border-top:1px solid var(--line);margin-top:30px;padding:26px 0;color:var
 @keyframes fu{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 
 @media(max-width:780px){.cards,.feats,.cols{grid-template-columns:1fr}.tkey{margin-left:0;max-width:none}.wordmark{letter-spacing:-1.5px}.feedback{padding:26px}}
-`;
+
+
+
+
+.attach-btn{display:grid;place-items:center;width:40px;height:40px;flex-shrink:0;border-radius:11px;color:var(--ink-soft);transition:.15s}
+.attach-btn:hover{background:var(--soft2);color:var(--blue)}
+.attach-btn:disabled{opacity:.4;cursor:not-allowed}
+
+
+.attach-chip{display:flex;align-items:center;gap:9px;margin-bottom:9px;padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:var(--soft);font-size:13px;color:var(--ink)}
+.attach-chip svg{color:var(--violet);flex-shrink:0}
+.attach-chip .ac-name{font-weight:600;font-family:'JetBrains Mono';font-size:12.5px}
+.attach-chip .ac-note{color:var(--muted);font-size:11.5px;margin-left:2px}
+.attach-chip .ac-x{margin-left:auto;display:grid;place-items:center;width:24px;height:24px;border-radius:7px;color:var(--muted);transition:.15s}
+.attach-chip .ac-x:hover{background:var(--soft2);color:var(--ink)}
+.attach-chip.prepping{color:var(--muted);font-style:italic}
+
+
+.attach-chip .ac-further{margin-left:auto;display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:999px;font-size:11.5px;font-weight:600;border:1px solid var(--line);background:#fff;color:var(--ink-soft);transition:.15s}
+.attach-chip .ac-further:hover{border-color:#c9cdf0;color:var(--ink)}
+.attach-chip .ac-further[data-on="true"]{background:var(--grad);border-color:transparent;color:#fff}
+.attach-chip .ac-further + .ac-x{margin-left:4px}
+
+
+.modal-overlay{position:fixed;inset:0;z-index:60;background:rgba(21,21,46,.45);backdrop-filter:blur(3px);display:grid;place-items:center;padding:22px;animation:fu .2s both}
+.modal{max-width:480px;width:100%;background:#fff;border:1px solid var(--line);border-radius:18px;padding:24px;box-shadow:0 30px 70px -24px rgba(21,21,46,.5)}
+.modal-h{display:flex;align-items:center;gap:10px;font-family:'Sora';font-weight:700;font-size:18px;margin-bottom:12px}
+.modal-h .mw{color:var(--violet)}
+.modal-b{font-size:14px;line-height:1.6;color:var(--ink-soft);margin:0 0 12px}
+.modal-b.sub{font-size:13px;color:var(--muted)}
+.modal-b code{font-family:'JetBrains Mono';font-size:12px;color:var(--blue)}
+.modal-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.modal-actions .btn{flex:1;justify-content:center;min-width:160px}
+
+`
+
+;
