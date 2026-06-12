@@ -46,6 +46,7 @@ export default function Tester({ onBack }) {
   const [attach, setAttach] = useState(null);     // prepared attachment, ready to send
   const [askDoc, setAskDoc] = useState(null);      // {file} awaiting the layout/format decision
   const [prepping, setPrepping] = useState(false); // reducing a document on the backend
+  const [compAssist, setCompAssist] = useState(true); // also smart_compress the model's prior replies
 
   const nRef = useRef(null), cRef = useRef(null), taRef = useRef(null), fileRef = useRef(null);
   const normalHist = useRef([]); // raw OpenAI messages {role,content}  (content: string | parts[])
@@ -64,8 +65,9 @@ export default function Tester({ onBack }) {
 
   const toggle = (k) => setFlags((f) => ({ ...f, [k]: !f[k] }));
   const fmt = (n) => n.toLocaleString("en-US");
-  const nt = tok.nin + tok.nout, ct = tok.cin + tok.cout;
-  const saved = nt > 0 ? Math.round((nt - ct) / nt * 100) : 0;
+  // We optimize INPUT (context) tokens, so the headline figure and the badge
+  // are both input-only: how much smaller the compressed context is vs raw.
+  const saved = tok.nin > 0 ? Math.round((tok.nin - tok.cin) / tok.nin * 100) : 0;
 
   // -- backend calls ---------------------------------------------------------
   async function smartCompressBatch(messages) {
@@ -309,48 +311,57 @@ export default function Tester({ onBack }) {
     setBusy(false);
   }
 
-  // Build the compressed-side payload. Every compressible string (always the
-  // typed prompt, plus body text when its flag says so) goes through the batch
-  // endpoint in one round trip; assistant turns and image/file parts pass
-  // through untouched. The prompt and body are then rejoined into one user turn.
+  // Build the compressed-side payload. Every compressible string goes through
+  // the batch endpoint in one round trip: always the typed prompt, body text
+  // when its flag allows, and — when "compress assistant replies" is on — the
+  // model's own prior answers. Image/file parts pass through untouched.
   async function buildCompressedPayload() {
     const items = compRaw.current;
     const batch = [];           // strings to smart_compress
     const slots = [];           // { i, field } telling us where each result goes
 
     items.forEach((m, i) => {
-      if (!m.userParts) return;
-      if (m.promptText && m.promptText.trim()) {
-        batch.push({ role: "user", content: m.promptText });
-        slots.push({ i, field: "prompt" });
-      }
-      if (m.bodyText && m.bodyCompress) {
-        batch.push({ role: "user", content: m.bodyText });
-        slots.push({ i, field: "body" });
+      if (m.userParts) {
+        if (m.promptText && m.promptText.trim()) {
+          batch.push({ role: "user", content: m.promptText });
+          slots.push({ i, field: "prompt" });
+        }
+        if (m.bodyText && m.bodyCompress) {
+          batch.push({ role: "user", content: m.bodyText });
+          slots.push({ i, field: "body" });
+        }
+      } else if (compAssist && m.role === "assistant"
+                 && typeof m.content === "string" && m.content.trim()) {
+        batch.push({ role: "assistant", content: m.content });
+        slots.push({ i, field: "assistant" });
       }
     });
 
     let compressed = [];
     if (batch.length) compressed = await smartCompressBatch(batch);
 
-    const cmap = {}; // i -> { prompt?, body? }
+    const cmap = {}; // i -> { prompt?, body?, assistant? }
     slots.forEach((s, k) => { (cmap[s.i] = cmap[s.i] || {})[s.field] = compressed[k]; });
 
     return items.map((m, i) => {
-      if (!m.userParts) return { role: m.role, content: m.content };
       const c = cmap[i] || {};
-      const promptOut = m.promptText && m.promptText.trim() ? (c.prompt ?? m.promptText) : "";
-      const bodyOut = m.bodyText == null
-        ? ""
-        : (m.bodyCompress ? (c.body ?? m.bodyText) : m.bodyText);
-      const joined = [promptOut, bodyOut].filter((x) => x && x.length).join("\n\n");
-      if (m.filePart) {
-        const parts = [];
-        if (joined) parts.push({ type: "text", text: joined });
-        parts.push(m.filePart);
-        return { role: "user", content: parts };
+      if (m.userParts) {
+        const promptOut = m.promptText && m.promptText.trim() ? (c.prompt ?? m.promptText) : "";
+        const bodyOut = m.bodyText == null
+          ? ""
+          : (m.bodyCompress ? (c.body ?? m.bodyText) : m.bodyText);
+        const joined = [promptOut, bodyOut].filter((x) => x && x.length).join("\n\n");
+        if (m.filePart) {
+          const parts = [];
+          if (joined) parts.push({ type: "text", text: joined });
+          parts.push(m.filePart);
+          return { role: "user", content: parts };
+        }
+        return { role: "user", content: joined };
       }
-      return { role: "user", content: joined };
+      // assistant / other: compressed if we compressed it, else verbatim
+      if (c.assistant != null) return { role: m.role, content: c.assistant };
+      return { role: m.role, content: m.content };
     });
   }
 
@@ -411,6 +422,18 @@ export default function Tester({ onBack }) {
           </button>
         ))}
       </div>
+      <div className="scope-row">
+        <button className="scope-tog" data-on={compAssist} onClick={() => setCompAssist((v) => !v)}
+          title="Apply smart_compress to the model's prior replies too, not just your messages">
+          <span className="sw" />
+          <span className="tt">
+            <span className="tn">compress assistant replies</span>
+            <span className="td">{compAssist
+              ? "the whole context window is compressed — your messages and the model's prior answers"
+              : "only your messages are compressed; the model's prior answers are resent verbatim"}</span>
+          </span>
+        </button>
+      </div>
       <p className="note">
         Each typed message is run through <code>smart_compress()</code> on the FastAPI backend (powered by the
         real <code>less-tokens</code> package), so code blocks, tables, URLs and math survive intact.
@@ -424,9 +447,7 @@ export default function Tester({ onBack }) {
         <section className="col raw">
           <div className="col-head"><div className="col-title"><span className="cdot" />raw context</div></div>
           <div className="stats">
-            <div className="stat t"><div className="n">{fmt(nt)}</div><div className="k">total tokens</div></div>
-            <div className="stat"><div className="n">{fmt(tok.nin)}</div><div className="k">input</div></div>
-            <div className="stat"><div className="n">{fmt(tok.nout)}</div><div className="k">output</div></div>
+            <div className="stat t"><div className="n">{fmt(tok.nin)}</div><div className="k">input tokens</div></div>
           </div>
           <div className="stream" ref={nRef}>
             <Bubbles list={normal} kind="raw" />
@@ -437,12 +458,10 @@ export default function Tester({ onBack }) {
         <section className="col cmp">
           <div className="col-head">
             <div className="col-title"><span className="cdot" />compressed context</div>
-            <span className="saved">{saved >= 0 ? "−" : "+"}{Math.abs(saved)}%</span>
+            <span className="saved" title="input tokens vs raw context">{saved >= 0 ? "−" : "+"}{Math.abs(saved)}%</span>
           </div>
           <div className="stats">
-            <div className="stat t"><div className="n">{fmt(ct)}</div><div className="k">total tokens</div></div>
-            <div className="stat"><div className="n">{fmt(tok.cin)}</div><div className="k">input</div></div>
-            <div className="stat"><div className="n">{fmt(tok.cout)}</div><div className="k">output</div></div>
+            <div className="stat t"><div className="n">{fmt(tok.cin)}</div><div className="k">input tokens</div></div>
           </div>
           <div className="stream" ref={cRef}>
             <Bubbles list={comp} kind="cmp" />

@@ -4,7 +4,7 @@
    Override at runtime with  window.LESS_TOKENS_API = "https://..." */
 export const API =
   (typeof window !== "undefined" && window.LESS_TOKENS_API) || "https://less-tokens-demo-production.up.railway.app";
-//"http://localhost:8000"
+//"http://localhost:8000"  "https://less-tokens-demo-production.up.railway.app"
 export const REPO = "https://github.com/shaminchokshi/less-tokens";
 export const PYPI = "https://pypi.org/project/less-tokens/";
 export const ISSUES = "https://github.com/shaminchokshi/less-tokens/issues";
@@ -224,6 +224,55 @@ footer{border-top:1px solid var(--line);margin-top:30px;padding:26px 0;color:var
 .modal-b code{font-family:'JetBrains Mono';font-size:12px;color:var(--blue)}
 .modal-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
 .modal-actions .btn{flex:1;justify-content:center;min-width:160px}
+
+
+
+/* paperclip button in the composer */
+.attach-btn{display:grid;place-items:center;width:40px;height:40px;flex-shrink:0;border-radius:11px;color:var(--ink-soft);transition:.15s}
+.attach-btn:hover{background:var(--soft2);color:var(--blue)}
+.attach-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* the chip that shows a staged / pending attachment above the composer */
+.attach-chip{display:flex;align-items:center;gap:9px;margin-bottom:9px;padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:var(--soft);font-size:13px;color:var(--ink)}
+.attach-chip svg{color:var(--violet);flex-shrink:0}
+.attach-chip .ac-name{font-weight:600;font-family:'JetBrains Mono';font-size:12.5px}
+.attach-chip .ac-note{color:var(--muted);font-size:11.5px;margin-left:2px}
+.attach-chip .ac-x{margin-left:auto;display:grid;place-items:center;width:24px;height:24px;border-radius:7px;color:var(--muted);transition:.15s}
+.attach-chip .ac-x:hover{background:var(--soft2);color:var(--ink)}
+.attach-chip.prepping{color:var(--muted);font-style:italic}
+
+/* "compress further" toggle shown on extracted-document attachments */
+.attach-chip .ac-further{margin-left:auto;display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:999px;font-size:11.5px;font-weight:600;border:1px solid var(--line);background:#fff;color:var(--ink-soft);transition:.15s}
+.attach-chip .ac-further:hover{border-color:#c9cdf0;color:var(--ink)}
+.attach-chip .ac-further[data-on="true"]{background:var(--grad);border-color:transparent;color:#fff}
+.attach-chip .ac-further + .ac-x{margin-left:4px}
+
+/* "compress assistant replies" scope toggle (below the technique grid) */
+.scope-row{margin:10px 0 2px}
+.scope-tog{display:inline-flex;align-items:center;gap:11px;padding:9px 14px;border:1px solid var(--line);border-radius:13px;background:#fff;text-align:left;transition:.15s;max-width:560px}
+.scope-tog:hover{border-color:#c9cdf0}
+.scope-tog .sw{position:relative;flex-shrink:0;width:36px;height:20px;border-radius:999px;background:#d7d9ec;transition:.18s}
+.scope-tog .sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(21,21,46,.3);transition:.18s}
+.scope-tog[data-on="true"] .sw{background:var(--grad)}
+.scope-tog[data-on="true"] .sw::after{transform:translateX(16px)}
+.scope-tog .tt{display:flex;flex-direction:column;gap:1px}
+.scope-tog .tn{font-size:13px;font-weight:600;color:var(--ink)}
+.scope-tog .td{font-size:11.5px;color:var(--muted);line-height:1.35}
+
+/* the PDF / Word layout-vs-content decision modal */
+.modal-overlay{position:fixed;inset:0;z-index:60;background:rgba(21,21,46,.45);backdrop-filter:blur(3px);display:grid;place-items:center;padding:22px;animation:fu .2s both}
+.modal{max-width:480px;width:100%;background:#fff;border:1px solid var(--line);border-radius:18px;padding:24px;box-shadow:0 30px 70px -24px rgba(21,21,46,.5)}
+.modal-h{display:flex;align-items:center;gap:10px;font-family:'Sora';font-weight:700;font-size:18px;margin-bottom:12px}
+.modal-h .mw{color:var(--violet)}
+.modal-b{font-size:14px;line-height:1.6;color:var(--ink-soft);margin:0 0 12px}
+.modal-b.sub{font-size:13px;color:var(--muted)}
+.modal-b code{font-family:'JetBrains Mono';font-size:12px;color:var(--blue)}
+.modal-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.modal-actions .btn{flex:1;justify-content:center;min-width:160px}
+
+
+
+
 
 `
 
