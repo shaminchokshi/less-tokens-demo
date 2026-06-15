@@ -6,7 +6,7 @@ Why this exists
 The in-browser tester can only do the lexical techniques. The heavier passes —
 POS-keep, lemmatize, synonym-shortening, named-entity protection — need NLTK and
 WordNet, which only run in Python. This service exposes ALL ELEVEN techniques over
-HTTP, plus the two 0.5.0 additions the frontend now relies on:
+HTTP, plus the three library helpers the frontend now relies on:
 
   * smart_compress()   — compress a conversation message, protecting code blocks,
                          tables, URLs, math and HTML, compressing only the prose.
@@ -16,6 +16,11 @@ HTTP, plus the two 0.5.0 additions the frontend now relies on:
                          Markdown (content only, no layout or metadata), so the
                          compressed side can send the lean text while the raw side
                          sends the full file.
+  * reduce_image_ocr() — OCR an uploaded image into clean text/Markdown, so an
+                         image that is mostly text (a screenshot, a scanned page,
+                         a receipt) can be sent to the model as a few tokens of
+                         text instead of a whole picture. Only worth it when the
+                         text is what matters — otherwise send the full image.
 
 What it does NOT do
 -------------------
@@ -39,6 +44,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from less_tokens import compress, reduce_document, smart_compress
+
+# reduce_image_ocr() is newer than reduce_document()/smart_compress(). Import it
+# defensively so the whole API still boots on a less-tokens build that predates
+# it — only the /reduce_image endpoint is disabled, everything else keeps working.
+try:
+    from less_tokens import reduce_image_ocr
+except ImportError:  # pragma: no cover
+    reduce_image_ocr = None
 
 # tiktoken ships with less-tokens, so token counts are exact (GPT cl100k).
 try:
@@ -200,6 +213,52 @@ async def do_reduce_document(
     except Exception as exc:  # surface a clean error to the browser
         raise HTTPException(status_code=422,
                             detail=f"Could not reduce '{filename}': {exc}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+    return {
+        "filename": filename,
+        "markdown": markdown,
+        "markdown_tokens": _ntok(markdown),
+        "markdown_chars": len(markdown),
+    }
+
+
+@app.post("/reduce_image")
+async def do_reduce_image(file: UploadFile = File(...)):
+    """OCR an uploaded image into clean text / Markdown.
+
+    The image is written to a temp path, run through reduce_image_ocr() (OCR),
+    and deleted before the response returns. Nothing is stored.
+
+    Use this only when the image is *mostly text* and that text is what you
+    actually need (a screenshot of a document, a scanned page, a receipt). It
+    discards everything visual — layout, charts, diagrams, photos, colour — so
+    if the picture itself matters, send the full image to the model instead."""
+    if reduce_image_ocr is None:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "reduce_image_ocr() is not available in the installed less-tokens build. "
+                "Upgrade or reinstall the package (e.g. `pip install -U less-tokens`, "
+                "or reinstall your local build) so it includes reduce_image_ocr, then restart "
+                "the server. Until then, use 'Send the full image' in the tester."
+            ),
+        )
+    filename = file.filename or "upload"
+    suffix = os.path.splitext(filename)[1] or ""
+    data = await file.read()
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+        markdown = reduce_image_ocr(tmp_path)
+    except Exception as exc:  # surface a clean error to the browser
+        raise HTTPException(status_code=422,
+                            detail=f"Could not OCR '{filename}': {exc}")
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)

@@ -45,7 +45,8 @@ export default function Tester({ onBack }) {
   // Attachment workflow
   const [attach, setAttach] = useState(null);     // prepared attachment, ready to send
   const [askDoc, setAskDoc] = useState(null);      // {file} awaiting the layout/format decision
-  const [prepping, setPrepping] = useState(false); // reducing a document on the backend
+  const [askImg, setAskImg] = useState(null);      // {file, stage} awaiting the image OCR decision
+  const [prepping, setPrepping] = useState(false); // reducing a document / OCRing an image
   const [compAssist, setCompAssist] = useState(true); // also smart_compress the model's prior replies
 
   const nRef = useRef(null), cRef = useRef(null), taRef = useRef(null), fileRef = useRef(null);
@@ -93,6 +94,18 @@ export default function Tester({ onBack }) {
     return (await res.json()).markdown;
   }
 
+  async function reduceImage(file) {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(API + "/reduce_image", { method: "POST", body: fd });
+    if (!res.ok) {
+      let msg = "Image OCR failed (" + res.status + ")";
+      try { msg = (await res.json()).detail || msg; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    return (await res.json()).markdown;
+  }
+
   async function callOpenAI(messages) {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -112,7 +125,7 @@ export default function Tester({ onBack }) {
     if (isPdf(file) || isWord(file)) {
       setAskDoc({ file });             // PDF / Word → ask the layout/format question
     } else if (isImage(file)) {
-      prepImage(file);
+      setAskImg({ file, stage: "menu" }); // image → ask how to use less-tokens on it
     } else {
       prepTextFile(file);              // .txt, .md, .csv, code, anything text-ish
     }
@@ -122,10 +135,10 @@ export default function Tester({ onBack }) {
     try {
       const url = await readDataURL(file);
       const part = { type: "image_url", image_url: { url } };
-      // An image can't be compressed or reduced — both sides send it identically.
+      // Full image: both sides send it identically — no compression, no OCR.
       setAttach({
         kind: "image", filename: file.name, icon: "image",
-        note: "images can't be compressed — sent as-is to both sides",
+        note: "full image — sent as-is to both sides (no compression)",
         rawFilePart: part, rawText: null,
         compFilePart: part, compText: null, compress: false,
       });
@@ -212,12 +225,118 @@ export default function Tester({ onBack }) {
     }
   }
 
+  // Decision from the image modal -----------------------------------------
+  // mode "full" → send the whole picture (prepImage). mode "ocr" → reduce_image()
+  // pulls the text out, exactly like reduce_document for a PDF: the raw side keeps
+  // the full image, the compressed side sends the OCR'd text AS-IS (with the
+  // "compress further" toggle to also run smart_compress on it).
+  async function decideImage(mode) {
+    const file = askImg.file;
+    setAskImg(null);
+    if (mode === "full") {
+      prepImage(file);
+      return;
+    }
+    setPrepping(true);
+    try {
+      const url = await readDataURL(file);
+      const part = { type: "image_url", image_url: { url } };
+      const markdown = await reduceImage(file);
+      setAttach({
+        kind: "image-ocr", filename: file.name, icon: "image",
+        note: "raw: full image · compressed: OCR'd text (as-is)",
+        rawFilePart: part, rawText: null,
+        compFilePart: null, compText: markdown, compress: false,
+        canCompressFurther: true,
+      });
+    } catch (err) {
+      setNormal((m) => [...m, { role: "error", text: err.message }]);
+    } finally {
+      setPrepping(false);
+    }
+  }
+
   // If the user has aggressive flags on, tables get chewed up — skip table
   // detection in reduce_document so we don't hand over half-broken pipes.
   const flagsBreakTables = () => flags.remove_stopwords || flags.pos_keep_only || flags.remove_function_words;
 
   // Toggle smart_compress on an extracted document's text (compressed side only).
   const toggleFurther = () => setAttach((a) => (a ? { ...a, compress: !a.compress } : a));
+
+  // Build the compressed-side payload. Every compressible string goes through
+  // the batch endpoint in one round trip: always the typed prompt, body text
+  // when its flag allows, and — when "compress assistant replies" is on — the
+  // model's own prior answers. Image/file parts pass through untouched.
+  async function buildCompressedPayload() {
+    const items = compRaw.current;
+    const batch = [];           // strings to smart_compress
+    const slots = [];           // { i, field } telling us where each result goes
+
+    items.forEach((m, i) => {
+      if (m.userParts) {
+        if (m.promptText && m.promptText.trim()) {
+          batch.push({ role: "user", content: m.promptText });
+          slots.push({ i, field: "prompt" });
+        }
+        if (m.bodyText && m.bodyCompress) {
+          batch.push({ role: "user", content: m.bodyText });
+          slots.push({ i, field: "body" });
+        }
+      } else if (compAssist && m.role === "assistant"
+                 && typeof m.content === "string" && m.content.trim()) {
+        batch.push({ role: "assistant", content: m.content });
+        slots.push({ i, field: "assistant" });
+      }
+    });
+
+    let compressed = [];
+    if (batch.length) compressed = await smartCompressBatch(batch);
+
+    const cmap = {}; // i -> { prompt?, body?, assistant? }
+    slots.forEach((s, k) => { (cmap[s.i] = cmap[s.i] || {})[s.field] = compressed[k]; });
+
+    return items.map((m, i) => {
+      const c = cmap[i] || {};
+      if (m.userParts) {
+        const promptOut = m.promptText && m.promptText.trim() ? (c.prompt ?? m.promptText) : "";
+        const bodyOut = m.bodyText == null
+          ? ""
+          : (m.bodyCompress ? (c.body ?? m.bodyText) : m.bodyText);
+        const joined = [promptOut, bodyOut].filter((x) => x && x.length).join("\n\n");
+        if (m.filePart) {
+          const parts = [];
+          if (joined) parts.push({ type: "text", text: joined });
+          parts.push(m.filePart);
+          return { role: "user", content: parts };
+        }
+        return { role: "user", content: joined };
+      }
+      // assistant / other: compressed if we compressed it, else verbatim
+      if (c.assistant != null) return { role: m.role, content: c.assistant };
+      return { role: m.role, content: m.content };
+    });
+  }
+
+  function reset() {
+    setNormal([]); setComp([]); setTok({ nin: 0, nout: 0, cin: 0, cout: 0 });
+    setAttach(null); setAskDoc(null); setAskImg(null);
+    normalHist.current = []; compRaw.current = [];
+  }
+  const onKey = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
+  const autosize = (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px"; };
+
+  const Bubbles = ({ list, kind }) => (
+    list.length === 0
+      ? <div className="empty">{kind === "raw"
+        ? "The full, uncompressed transcript is resent every turn. Upload a file and the whole thing rides along. Watch the token count climb."
+        : <>Every prior message is run through the backend's <code>smart_compress()</code> before being resent — code, tables and URLs are protected. Files are reduced to clean text first. Same chat, fewer tokens.</>}</div>
+      : list.map((m, i) => m.role === "error"
+        ? <div key={i} className="err">⚠ {m.text}</div>
+        : <div key={i} className={"msg " + m.role}>
+            {m.text}
+            {m.role === "assistant" && <div className="meta">ctx sent: {fmt(m.ctx || 0)} tok · reply: {fmt(m.out || 0)} tok</div>}
+          </div>)
+  );
 
   // -- send ------------------------------------------------------------------
   async function send() {
@@ -310,81 +429,6 @@ export default function Tester({ onBack }) {
     }
     setBusy(false);
   }
-
-  // Build the compressed-side payload. Every compressible string goes through
-  // the batch endpoint in one round trip: always the typed prompt, body text
-  // when its flag allows, and — when "compress assistant replies" is on — the
-  // model's own prior answers. Image/file parts pass through untouched.
-  async function buildCompressedPayload() {
-    const items = compRaw.current;
-    const batch = [];           // strings to smart_compress
-    const slots = [];           // { i, field } telling us where each result goes
-
-    items.forEach((m, i) => {
-      if (m.userParts) {
-        if (m.promptText && m.promptText.trim()) {
-          batch.push({ role: "user", content: m.promptText });
-          slots.push({ i, field: "prompt" });
-        }
-        if (m.bodyText && m.bodyCompress) {
-          batch.push({ role: "user", content: m.bodyText });
-          slots.push({ i, field: "body" });
-        }
-      } else if (compAssist && m.role === "assistant"
-                 && typeof m.content === "string" && m.content.trim()) {
-        batch.push({ role: "assistant", content: m.content });
-        slots.push({ i, field: "assistant" });
-      }
-    });
-
-    let compressed = [];
-    if (batch.length) compressed = await smartCompressBatch(batch);
-
-    const cmap = {}; // i -> { prompt?, body?, assistant? }
-    slots.forEach((s, k) => { (cmap[s.i] = cmap[s.i] || {})[s.field] = compressed[k]; });
-
-    return items.map((m, i) => {
-      const c = cmap[i] || {};
-      if (m.userParts) {
-        const promptOut = m.promptText && m.promptText.trim() ? (c.prompt ?? m.promptText) : "";
-        const bodyOut = m.bodyText == null
-          ? ""
-          : (m.bodyCompress ? (c.body ?? m.bodyText) : m.bodyText);
-        const joined = [promptOut, bodyOut].filter((x) => x && x.length).join("\n\n");
-        if (m.filePart) {
-          const parts = [];
-          if (joined) parts.push({ type: "text", text: joined });
-          parts.push(m.filePart);
-          return { role: "user", content: parts };
-        }
-        return { role: "user", content: joined };
-      }
-      // assistant / other: compressed if we compressed it, else verbatim
-      if (c.assistant != null) return { role: m.role, content: c.assistant };
-      return { role: m.role, content: m.content };
-    });
-  }
-
-  function reset() {
-    setNormal([]); setComp([]); setTok({ nin: 0, nout: 0, cin: 0, cout: 0 });
-    setAttach(null); setAskDoc(null);
-    normalHist.current = []; compRaw.current = [];
-  }
-  const onKey = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
-  const autosize = (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px"; };
-
-  const Bubbles = ({ list, kind }) => (
-    list.length === 0
-      ? <div className="empty">{kind === "raw"
-        ? "The full, uncompressed transcript is resent every turn. Upload a file and the whole thing rides along. Watch the token count climb."
-        : <>Every prior message is run through the backend's <code>smart_compress()</code> before being resent — code, tables and URLs are protected. Files are reduced to clean text first. Same chat, fewer tokens.</>}</div>
-      : list.map((m, i) => m.role === "error"
-        ? <div key={i} className="err">⚠ {m.text}</div>
-        : <div key={i} className={"msg " + m.role}>
-            {m.text}
-            {m.role === "assistant" && <div className="meta">ctx sent: {fmt(m.ctx || 0)} tok · reply: {fmt(m.out || 0)} tok</div>}
-          </div>)
-  );
 
   return (
     <div className="tester wrap">
@@ -485,7 +529,7 @@ export default function Tester({ onBack }) {
             <button className="ac-x" onClick={() => setAttach(null)} aria-label="remove attachment"><X size={14} /></button>
           </div>
         )}
-        {prepping && <div className="attach-chip prepping">extracting document text…</div>}
+        {prepping && <div className="attach-chip prepping">extracting text…</div>}
         <div className="composer-in">
           <input ref={fileRef} type="file" hidden onChange={onPickFile} />
           <button className="attach-btn" onClick={() => fileRef.current && fileRef.current.click()}
@@ -519,6 +563,52 @@ export default function Tester({ onBack }) {
               <button className="btn btn-grad" onClick={() => decideDoc(true)}>Only the content matters</button>
               <button className="btn btn-ghost" onClick={() => decideDoc(false)}>Formatting matters — keep the full file</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {askImg && (
+        <div className="modal-overlay" onClick={() => setAskImg(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            {askImg.stage === "menu" ? (
+              <>
+                <div className="modal-h"><ImageIcon size={20} className="mw" /> Image processing</div>
+                <p className="modal-b">
+                  You attached <b>{askImg.file.name}</b>. Pick how <code>less-tokens</code> should process it to
+                  save tokens — this menu will grow as more image tools land. Available now:
+                </p>
+                <p className="modal-b sub">
+                  <b>OCR</b> (optical character recognition) reads the text out of an image and sends just that
+                  text instead of the pixels — far fewer tokens, but it keeps only the words, not the picture.
+                  Prefer <b>send the full image</b> when the visual itself matters.
+                </p>
+                <div className="modal-actions">
+                  <button className="btn btn-grad" onClick={() => setAskImg((s) => ({ ...s, stage: "warn" }))}>
+                    OCR — extract the text
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => decideImage("full")}>
+                    Send the full image
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="modal-h"><AlertTriangle size={20} className="mw" /> Use OCR only if it fits</div>
+                <p className="modal-b">
+                  OCR is only worth it when <b>{askImg.file.name}</b> is <b>mostly text</b> and that <b>text is what
+                  you actually need</b> — a screenshot of a document, a scanned page, a receipt.
+                </p>
+                <p className="modal-b sub">
+                  <code>reduce_image_ocr()</code> throws away everything visual — layout, charts, diagrams, photos, colour.
+                  If the picture itself matters (a chart you want read, a photo to describe, a diagram to interpret),
+                  <b> don't OCR it</b> — send the full image instead.
+                </p>
+                <div className="modal-actions">
+                  <button className="btn btn-grad" onClick={() => decideImage("ocr")}>It's mostly text — run OCR</button>
+                  <button className="btn btn-ghost" onClick={() => decideImage("full")}>Send the full image instead</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
