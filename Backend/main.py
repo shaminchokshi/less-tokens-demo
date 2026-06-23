@@ -13,6 +13,9 @@ This version adds:
         a slow OCR call.
       - Pool workers are pre-warmed (NLTK/WordNet loaded once at startup), so no
         single request eats the cold-start cost mid-flight.
+  * Zone-aware structured compression via POST /compress_structured, so a prompt
+    that mixes a compressible instruction with rules and an output schema can be
+    compressed per-zone (free / careful / protected).
 
 What it still does NOT do: it never sees your OpenAI key, and it stores nothing —
 uploaded files are written to a temp path, parsed, and deleted in the same request.
@@ -48,6 +51,13 @@ try:
     from less_tokens import reduce_image_ocr
 except ImportError:  # pragma: no cover
     reduce_image_ocr = None
+
+# compress_structured() is also newer. Same defensive treatment — only
+# /compress_structured is disabled if the installed build is missing it.
+try:
+    from less_tokens import compress_structured
+except ImportError:  # pragma: no cover
+    compress_structured = None
 
 # tiktoken ships with less-tokens, so token counts are exact (GPT cl100k).
 try:
@@ -100,6 +110,13 @@ def _compress_plain(content: str, flags: dict) -> str:
     return compress(content, **flags)
 
 
+def _compress_structured_call(zones: list, flags: dict) -> dict:
+    """Picklable pool worker for zone-aware compression. `flags` only affect the
+    `free` zones — `careful` uses the library's fixed safe subset and
+    `protected` is returned untouched."""
+    return compress_structured(zones=zones, return_detail=True, **flags)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Warm the main process, spin up a pre-warmed pool, tear it down on exit."""
@@ -118,7 +135,7 @@ async def lifespan(app: FastAPI):
             _pool.shutdown(cancel_futures=True)
 
 
-app = FastAPI(title="less-tokens API", version="2.1.0", lifespan=lifespan)
+app = FastAPI(title="less-tokens API", version="2.2.0", lifespan=lifespan)
 
 # Open CORS so the static frontend (any origin) can call this in a demo.
 # In production, replace ["*"] with your real frontend origin(s).
@@ -200,6 +217,19 @@ class Msg(BaseModel):
 class BatchReq(BaseModel):
     messages: List[Msg]
     flags: Flags = Flags()
+
+
+class Zone(BaseModel):
+    text: str
+    level: str = "free"  # "free" | "careful" | "protected"
+
+
+class StructuredReq(BaseModel):
+    zones: List[Zone]
+    flags: Flags = Flags()
+
+
+_ALLOWED_LEVELS = {"free", "careful", "protected"}
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +341,76 @@ async def do_smart_compress_batch(req: BatchReq):
     untouched. Messages are compressed in parallel across all cores."""
     out = await _run_batch(req.messages, _as_dict(req.flags), _compress_one)
     return {"messages": out}
+
+
+@app.post("/compress_structured")
+async def do_compress_structured(req: StructuredReq):
+    """Zone-aware compression. Each zone carries a level:
+
+        free       full compression with the chosen flags   (instruction body)
+        careful    safe, meaning-preserving techniques only  (rules & constraints)
+        protected  returned byte-for-byte, untouched         (JSON schemas, formats)
+
+    The flags only affect `free` zones. Returns the assembled compressed prompt,
+    the assembled raw prompt, exact token counts for each side, and per-zone
+    detail for the UI."""
+    if compress_structured is None:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "compress_structured() is not available in the installed "
+                "less-tokens build. Upgrade the package (pip install -U "
+                "less-tokens) and restart the server. Until then, use Normal "
+                "input in the tester."
+            ),
+        )
+
+    if not req.zones:
+        raise HTTPException(status_code=422, detail="Provide at least one zone.")
+
+    zones = []
+    for z in req.zones:
+        lvl = (z.level or "free").lower()
+        if lvl not in _ALLOWED_LEVELS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown zone level '{z.level}'. "
+                       f"Use one of: {', '.join(sorted(_ALLOWED_LEVELS))}.",
+            )
+        zones.append({"text": z.text, "level": lvl})
+
+    fl = _as_dict(req.flags)
+
+    # Run the (GIL-bound) compression off the event loop, on the pool if we have
+    # one, inline otherwise — same pattern as /compress.
+    loop = asyncio.get_running_loop()
+    try:
+        if _pool is not None:
+            result = await loop.run_in_executor(
+                _pool, _compress_structured_call, zones, fl
+            )
+        else:
+            result = _compress_structured_call(zones, fl)
+    except Exception as exc:  # surface a clean error to the browser
+        raise HTTPException(
+            status_code=422, detail=f"compress_structured failed: {exc}"
+        )
+
+    compressed = result["compressed"]
+    raw = "\n\n".join(z["text"] for z in zones if z["text"].strip())
+
+    o, c = _ntok(raw), _ntok(compressed)
+    return {
+        "compressed": compressed,
+        "raw": raw,
+        "original_tokens": o,
+        "compressed_tokens": c,
+        "token_reduction_pct": round((1 - c / o) * 100, 2) if o else 0.0,
+        "original_chars": len(raw),
+        "compressed_chars": len(compressed),
+        # one entry per zone: level + before/after length, for debugging in the UI
+        "zones": result.get("zones", []),
+    }
 
 
 @app.post("/reduce_document")

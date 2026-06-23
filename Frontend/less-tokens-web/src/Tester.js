@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   ShieldCheck, ChevronLeft, Send, RotateCcw, Zap,
   Paperclip, X, FileText, Image as ImageIcon, AlertTriangle,
+  Type, Layers, Plus, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { API, FLAG_DEFS, DEFAULT_FLAGS } from "./shared.js";
 
@@ -32,6 +33,115 @@ const readText = (file) =>
     r.readAsText(file);
   });
 
+/* ── compress_structured: zone levels ─────────────────────────────────────────
+   free      → full compression with your flags        (instruction body)
+   careful   → safe, meaning-preserving techniques only (rules & constraints)
+   protected → byte-for-byte, untouched                 (JSON schemas, formats)   */
+const LEVELS = {
+  free: {
+    label: "Free",
+    blurb: "Full compression with your flags",
+    use: "instruction body",
+    ph: "Instruction body — compressed hard with your chosen flags…",
+  },
+  careful: {
+    label: "Careful",
+    blurb: "Safe techniques only — meaning preserved",
+    use: "rules & constraints",
+    ph: "Rules & constraints — negations and logic stay intact…",
+  },
+  protected: {
+    label: "Protected",
+    blurb: "Byte-for-byte, untouched",
+    use: "schemas & formats",
+    ph: 'Output format — sent exactly as typed, e.g. {"sentiment":"..."}',
+  },
+};
+const LEVEL_ORDER = ["free", "careful", "protected"];
+
+/* Assemble the raw side the same way the library joins zones ("\n\n"). */
+const assembleRaw = (zones) =>
+  zones.map((z) => z.text).filter((t) => t.trim()).join("\n\n");
+/* Rough token estimate for the per-zone meter (real counts come from OpenAI). */
+const estTok = (s) => (s ? Math.max(1, Math.round(s.length / 4)) : 0);
+
+/* Scoped styles for the mode toggle + zone editor, in the site's design tokens. */
+const ZONE_CSS = `
+.io-mode{display:inline-flex;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px;margin-bottom:10px}
+.io-mode-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 15px;border-radius:9px;font-size:13.5px;font-weight:600;color:var(--ink-soft);transition:.15s}
+.io-mode-btn:hover{color:var(--ink)}
+.io-mode-btn[data-on="true"]{background:#fff;color:var(--ink);box-shadow:0 4px 14px -8px rgba(59,70,232,.5)}
+.io-mode-btn[data-on="true"] svg{color:var(--violet)}
+
+.zone-editor{--zf:#16a34a;--zc:#d97706;--zp:#dc2626;border:1px solid var(--line);border-radius:16px;background:#fff;padding:14px;box-shadow:0 10px 30px -18px rgba(21,21,46,.3)}
+.ze-help{font-size:12.5px;color:var(--muted);margin:0 0 12px;line-height:1.5}
+.ze-empty{font-size:13px;color:var(--muted);background:var(--soft);border:1px dashed var(--line);border-radius:12px;padding:16px;text-align:center;margin-bottom:12px}
+.ze-zone{position:relative;display:flex;border:1px solid var(--line);border-left:0;border-radius:12px;overflow:hidden;margin-bottom:10px;background:var(--soft)}
+.ze-zone[data-level="free"]{--zc-cur:var(--zf)}
+.ze-zone[data-level="careful"]{--zc-cur:var(--zc)}
+.ze-zone[data-level="protected"]{--zc-cur:var(--zp)}
+.ze-bar{width:4px;flex:0 0 4px;background:var(--zc-cur)}
+.ze-main{flex:1;min-width:0;padding:11px 13px}
+.ze-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+.ze-seg{display:inline-flex;background:#fff;border:1px solid var(--line);border-radius:9px;padding:2px;gap:2px}
+.ze-seg-btn{border:0;background:transparent;font-size:11.5px;font-weight:600;color:var(--muted);padding:5px 11px;border-radius:7px;transition:.12s;cursor:pointer}
+.ze-seg-btn:hover{color:var(--ink)}
+.ze-seg-btn[data-level="free"][data-on="true"]{background:var(--zf);color:#fff}
+.ze-seg-btn[data-level="careful"][data-on="true"]{background:var(--zc);color:#fff}
+.ze-seg-btn[data-level="protected"][data-on="true"]{background:var(--zp);color:#fff}
+.ze-tools{display:flex;align-items:center;gap:5px}
+.ze-tok{font-size:11px;color:var(--muted);font-family:'JetBrains Mono';margin-right:3px}
+.ze-icon{display:grid;place-items:center;width:25px;height:25px;border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:7px;transition:.12s;cursor:pointer}
+.ze-icon:hover:not(:disabled){color:var(--ink);border-color:#c9cdf0}
+.ze-icon:disabled{opacity:.35;cursor:not-allowed}
+.ze-del:hover:not(:disabled){color:var(--zp);border-color:var(--zp)}
+.ze-text{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:9px;background:#fff;font-family:inherit;font-size:13.5px;line-height:1.5;color:var(--ink);padding:9px 11px;resize:vertical;outline:none}
+.ze-text:focus{border-color:var(--zc-cur);box-shadow:0 0 0 3px color-mix(in srgb,var(--zc-cur) 18%,transparent)}
+.ze-foot{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--muted)}
+.ze-dot{width:7px;height:7px;border-radius:50%;background:var(--zc-cur);flex-shrink:0}
+.ze-add{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px}
+.ze-add-lab{font-size:12px;font-weight:600;color:var(--muted);margin-right:2px}
+.ze-add-btn{display:inline-flex;align-items:center;gap:5px;border-radius:9px;font-size:12.5px;font-weight:600;padding:7px 12px;cursor:pointer;transition:.12s;border:1px solid}
+.ze-add-btn[data-level="free"]{color:var(--zf);border-color:var(--zf);background:color-mix(in srgb,var(--zf) 8%,#fff)}
+.ze-add-btn[data-level="free"]:hover{background:var(--zf);color:#fff}
+.ze-add-btn[data-level="careful"]{color:var(--zc);border-color:var(--zc);background:color-mix(in srgb,var(--zc) 8%,#fff)}
+.ze-add-btn[data-level="careful"]:hover{background:var(--zc);color:#fff}
+.ze-add-btn[data-level="protected"]{color:var(--zp);border-color:var(--zp);background:color-mix(in srgb,var(--zp) 8%,#fff)}
+.ze-add-btn[data-level="protected"]:hover{background:var(--zp);color:#fff}
+.ze-send{margin-left:auto}
+
+/* full-screen, full-width app layout: edge-to-edge, the chat area fills the
+   viewport height between the header/note above and the composer below */
+.tester.wrap{height:100vh;min-height:100vh;overflow:hidden;max-width:none;width:100%}
+.work{display:flex;gap:16px;align-items:stretch;margin-bottom:8px;flex:1 1 auto;min-height:0}
+.rail{flex:0 0 230px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;padding-right:6px;min-height:0}
+.rail::-webkit-scrollbar{width:8px}
+.rail::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+.rail-h{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:2px 2px}
+.toggles-rail{display:flex;flex-direction:column;gap:8px;margin:0}
+.toggles-rail .tog{width:100%}
+
+/* the chats + the "compress assistant replies" toggle that sits on top of them */
+.chat-area{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;gap:10px;margin:0}
+.chat-area .scope-row{margin:0}
+.chat-area .scope-tog{max-width:none}
+.chat-area .cols{flex:1;min-height:0;height:auto;margin:0}
+
+/* chats fill the available height and scroll inside instead of growing the page */
+.tester .col{min-height:0;max-height:none;height:100%}
+
+@media(max-width:780px){
+  .tester.wrap{height:auto;min-height:100vh;overflow:visible}
+  .work{flex-direction:column;flex:auto;min-height:0}
+  .rail{flex:auto;overflow:visible;padding-right:0;width:100%}
+  .toggles-rail{flex-direction:row;flex-wrap:wrap}
+  .toggles-rail .tog{width:auto}
+  .chat-area{height:auto}
+  .chat-area .cols{height:auto}
+  .tester .col{min-height:60vh;height:auto}
+}
+`;
+
 export default function Tester({ onBack }) {
   const [apiKey, setApiKey] = useState("");
   const [input, setInput] = useState("");
@@ -41,6 +151,10 @@ export default function Tester({ onBack }) {
   const [normal, setNormal] = useState([]); // {role,text,ctx,out} | {role:'error',text}
   const [comp, setComp] = useState([]);
   const [tok, setTok] = useState({ nin: 0, nout: 0, cin: 0, cout: 0 });
+
+  // Input mode: "normal" (single textarea) or "structured" (zone editor).
+  const [inputMode, setInputMode] = useState("normal");
+  const [zones, setZones] = useState([]); // [{ id, text, level }]
 
   // Attachment workflow
   const [attach, setAttach] = useState(null);     // prepared attachment, ready to send
@@ -70,6 +184,21 @@ export default function Tester({ onBack }) {
   // are both input-only: how much smaller the compressed context is vs raw.
   const saved = tok.nin > 0 ? Math.round((tok.nin - tok.cin) / tok.nin * 100) : 0;
 
+  // -- zone helpers ----------------------------------------------------------
+  const newId = () => Math.random().toString(36).slice(2, 9);
+  const addZone = (level) => setZones((zs) => [...zs, { id: newId(), text: "", level }]);
+  const removeZone = (id) => setZones((zs) => zs.filter((z) => z.id !== id));
+  const setZoneText = (id, text) => setZones((zs) => zs.map((z) => (z.id === id ? { ...z, text } : z)));
+  const setZoneLevel = (id, level) => setZones((zs) => zs.map((z) => (z.id === id ? { ...z, level } : z)));
+  const moveZone = (id, dir) => setZones((zs) => {
+    const i = zs.findIndex((z) => z.id === id);
+    const j = i + dir;
+    if (j < 0 || j >= zs.length) return zs;
+    const n = zs.slice();
+    [n[i], n[j]] = [n[j], n[i]];
+    return n;
+  });
+
   // -- backend calls ---------------------------------------------------------
   async function smartCompressBatch(messages) {
     const res = await fetch(API + "/smart_compress_batch", {
@@ -79,6 +208,25 @@ export default function Tester({ onBack }) {
     });
     if (!res.ok) throw new Error("Compression backend error " + res.status);
     return (await res.json()).messages;
+  }
+
+  // Zone-aware compression. The flags object is sent as-is — it only affects the
+  // `free` zones; `careful` runs a safe subset, `protected` is untouched.
+  async function compressStructured(zoneList) {
+    const res = await fetch(API + "/compress_structured", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        zones: zoneList.map(({ text, level }) => ({ text, level })),
+        flags,
+      }),
+    });
+    if (!res.ok) {
+      let msg = "Structured compression failed (" + res.status + ")";
+      try { msg = (await res.json()).detail || msg; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    return res.json(); // { compressed, raw, *_tokens, zones, ... }
   }
 
   async function reduceDocument(file, includeTables = true) {
@@ -267,6 +415,8 @@ export default function Tester({ onBack }) {
   // the batch endpoint in one round trip: always the typed prompt, body text
   // when its flag allows, and — when "compress assistant replies" is on — the
   // model's own prior answers. Image/file parts pass through untouched.
+  // Structured-mode turns are stored as plain { role:"user", content } strings
+  // (already compressed by /compress_structured) and pass through verbatim here.
   async function buildCompressedPayload() {
     const items = compRaw.current;
     const batch = [];           // strings to smart_compress
@@ -311,7 +461,7 @@ export default function Tester({ onBack }) {
         }
         return { role: "user", content: joined };
       }
-      // assistant / other: compressed if we compressed it, else verbatim
+      // assistant / structured-user / other: compressed if we compressed it, else verbatim
       if (c.assistant != null) return { role: m.role, content: c.assistant };
       return { role: m.role, content: m.content };
     });
@@ -319,7 +469,7 @@ export default function Tester({ onBack }) {
 
   function reset() {
     setNormal([]); setComp([]); setTok({ nin: 0, nout: 0, cin: 0, cout: 0 });
-    setAttach(null); setAskDoc(null); setAskImg(null);
+    setAttach(null); setAskDoc(null); setAskImg(null); setZones([]);
     normalHist.current = []; compRaw.current = [];
   }
   const onKey = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
@@ -338,55 +488,10 @@ export default function Tester({ onBack }) {
           </div>)
   );
 
-  // -- send ------------------------------------------------------------------
-  async function send() {
-    const text = input.trim();
-    if (busy || prepping) return;
-    if (!text && !attach) return;
-    if (!apiKey.trim()) {
-      setNormal((m) => [...m, { role: "error", text: "Add your OpenAI API key (top right) first." }]);
-      return;
-    }
-
-    const a = attach;
-    setBusy(true); setInput(""); setAttach(null);
-    if (taRef.current) taRef.current.style.height = "auto";
-
-    // RAW side: the full, uncompressed turn (typed text + whole file).
-    let rawContent;
-    if (a) {
-      const rawTextBits = [text, a.rawText].filter(Boolean).join("\n\n");
-      if (a.rawFilePart) {
-        rawContent = [];
-        if (rawTextBits) rawContent.push({ type: "text", text: rawTextBits });
-        rawContent.push(a.rawFilePart);
-      } else {
-        rawContent = rawTextBits;
-      }
-    } else {
-      rawContent = text;
-    }
-    normalHist.current.push({ role: "user", content: rawContent });
-
-    // COMPRESSED side: stored as structured parts so the typed prompt ALWAYS
-    // gets compressed, independently of how the attached file is handled:
-    //   promptText  — the message you typed; always smart_compressed
-    //   bodyText    — file/extracted text; compressed only if bodyCompress
-    //   filePart    — an image/PDF part passed through untouched (prompt beside
-    //                 it is still compressed)
-    compRaw.current.push({
-      role: "user",
-      userParts: true,
-      promptText: text || "",
-      bodyText: a && !a.compFilePart ? (a.compText || null) : null,
-      bodyCompress: a ? !!a.compress : false,
-      filePart: a ? a.compFilePart : null,
-    });
-
-    // Display bubbles (separate from the actual API payloads)
-    const fileLabel = a ? `  📎 ${a.filename}` : "";
-    setNormal((m) => [...m, { role: "user", text: (text || "(file only)") + fileLabel }]);
-
+  // -- shared dispatch: build the compressed history, fire both chats --------
+  // Called by both send() (normal) and sendStructured() after each has pushed
+  // its user turn onto normalHist + compRaw and shown the raw user bubble.
+  async function dispatch(fileLabel = "") {
     // 1) build + compress the compressed-side history
     let compPayload = null;
     try {
@@ -430,8 +535,94 @@ export default function Tester({ onBack }) {
     setBusy(false);
   }
 
+  // -- send: structured mode -------------------------------------------------
+  async function sendStructured() {
+    const list = zones.filter((z) => z.text.trim());
+    if (!list.length) return;
+    setBusy(true);
+
+    // RAW side: every zone, uncompressed, joined the way the library joins them.
+    const rawText = assembleRaw(list);
+    normalHist.current.push({ role: "user", content: rawText });
+
+    // COMPRESSED side: one round trip → the assembled, zone-aware prompt.
+    let compressedText = rawText;          // fallback to raw if the call fails
+    try {
+      const r = await compressStructured(list);
+      compressedText = r.compressed || rawText;
+    } catch (e) {
+      setComp((m) => [...m, { role: "error", text: e.message + " — is the FastAPI backend running at " + API + " ?" }]);
+    }
+    // Stored as an already-compressed plain string so buildCompressedPayload
+    // passes it through untouched (it only re-compresses userParts/assistant).
+    compRaw.current.push({ role: "user", content: compressedText });
+
+    setNormal((m) => [...m, { role: "user", text: rawText }]);
+    setZones([]);                          // clear the editor for the next turn
+
+    await dispatch("");                    // sets the compressed bubble + fires both chats
+  }
+
+  // -- send ------------------------------------------------------------------
+  async function send() {
+    if (busy || prepping) return;
+    if (!apiKey.trim()) {
+      setNormal((m) => [...m, { role: "error", text: "Add your OpenAI API key (top right) first." }]);
+      return;
+    }
+
+    if (inputMode === "structured") return sendStructured();
+
+    const text = input.trim();
+    if (!text && !attach) return;
+
+    const a = attach;
+    setBusy(true); setInput(""); setAttach(null);
+    if (taRef.current) taRef.current.style.height = "auto";
+
+    // RAW side: the full, uncompressed turn (typed text + whole file).
+    let rawContent;
+    if (a) {
+      const rawTextBits = [text, a.rawText].filter(Boolean).join("\n\n");
+      if (a.rawFilePart) {
+        rawContent = [];
+        if (rawTextBits) rawContent.push({ type: "text", text: rawTextBits });
+        rawContent.push(a.rawFilePart);
+      } else {
+        rawContent = rawTextBits;
+      }
+    } else {
+      rawContent = text;
+    }
+    normalHist.current.push({ role: "user", content: rawContent });
+
+    // COMPRESSED side: stored as structured parts so the typed prompt ALWAYS
+    // gets compressed, independently of how the attached file is handled:
+    //   promptText  — the message you typed; always smart_compressed
+    //   bodyText    — file/extracted text; compressed only if bodyCompress
+    //   filePart    — an image/PDF part passed through untouched (prompt beside
+    //                 it is still compressed)
+    compRaw.current.push({
+      role: "user",
+      userParts: true,
+      promptText: text || "",
+      bodyText: a && !a.compFilePart ? (a.compText || null) : null,
+      bodyCompress: a ? !!a.compress : false,
+      filePart: a ? a.compFilePart : null,
+    });
+
+    // Display bubbles (separate from the actual API payloads)
+    const fileLabel = a ? `  📎 ${a.filename}` : "";
+    setNormal((m) => [...m, { role: "user", text: (text || "(file only)") + fileLabel }]);
+
+    await dispatch(fileLabel);
+  }
+
+  const canSendStructured = zones.some((z) => z.text.trim());
+
   return (
     <div className="tester wrap">
+      <style>{ZONE_CSS}</style>
       <div className="tbar" style={{ marginLeft: -22, marginRight: -22, paddingLeft: 22, paddingRight: 22 }}>
         <div className="tbar-inner">
           <button className="back" onClick={onBack}><ChevronLeft size={18} /> back to home</button>
@@ -458,88 +649,176 @@ export default function Tester({ onBack }) {
           <span className="sd" /> backend {backendUp === null ? "…" : backendUp ? "online" : "offline"}
         </span>
       </div>
-      <div className="toggles">
-        {FLAG_DEFS.map(([key, name, desc]) => (
-          <button key={key} className="tog" data-on={flags[key]} onClick={() => toggle(key)}>
-            <span className="sw" />
-            <span className="tt"><span className="tn">{name}</span><span className="td">{desc}</span></span>
-          </button>
-        ))}
-      </div>
-      <div className="scope-row">
-        <button className="scope-tog" data-on={compAssist} onClick={() => setCompAssist((v) => !v)}
-          title="Apply smart_compress to the model's prior replies too, not just your messages">
-          <span className="sw" />
-          <span className="tt">
-            <span className="tn">compress assistant replies</span>
-            <span className="td">{compAssist
-              ? "the whole context window is compressed — your messages and the model's prior answers"
-              : "only your messages are compressed; the model's prior answers are resent verbatim"}</span>
-          </span>
-        </button>
-      </div>
       <p className="note">
         Each typed message is run through <code>smart_compress()</code> on the FastAPI backend (powered by the
         real <code>less-tokens</code> package), so code blocks, tables, URLs and math survive intact.
         Negations and question words are always protected. <b>Your typed prompt is always compressed</b>, even when
         a file is attached. Uploaded files are reduced with <code>reduce_document()</code> and the extracted text
         drops into the compressed side <b>as-is</b> — tap <b>compress further</b> on the attachment to also
-        smart-compress it. Model: <code>{MODEL}</code>.
+        smart-compress it. Switch to <b>Structured</b> below to compress per-zone with <code>compress_structured()</code>.
+        Model: <code>{MODEL}</code>.
       </p>
 
-      <div className="cols">
-        <section className="col raw">
-          <div className="col-head"><div className="col-title"><span className="cdot" />raw context</div></div>
-          <div className="stats">
-            <div className="stat t"><div className="n">{fmt(tok.nin)}</div><div className="k">input tokens</div></div>
+      <div className="work">
+        <aside className="rail">
+          <div className="rail-h">Techniques</div>
+          <div className="toggles toggles-rail">
+            {FLAG_DEFS.map(([key, name, desc]) => (
+              <button key={key} className="tog" data-on={flags[key]} onClick={() => toggle(key)}>
+                <span className="sw" />
+                <span className="tt"><span className="tn">{name}</span><span className="td">{desc}</span></span>
+              </button>
+            ))}
           </div>
-          <div className="stream" ref={nRef}>
-            <Bubbles list={normal} kind="raw" />
-            {busy && <div className="typing"><span /><span /><span /></div>}
-          </div>
-        </section>
+        </aside>
 
-        <section className="col cmp">
-          <div className="col-head">
-            <div className="col-title"><span className="cdot" />compressed context</div>
-            <span className="saved" title="input tokens vs raw context">{saved >= 0 ? "−" : "+"}{Math.abs(saved)}%</span>
+        <div className="chat-area">
+          <div className="scope-row">
+            <button className="scope-tog" data-on={compAssist} onClick={() => setCompAssist((v) => !v)}
+              title="Apply smart_compress to the model's prior replies too, not just your messages">
+              <span className="sw" />
+              <span className="tt">
+                <span className="tn">compress assistant replies</span>
+                <span className="td">{compAssist
+                  ? "the whole context window is compressed — your messages and the model's prior answers"
+                  : "only your messages are compressed; the model's prior answers are resent verbatim"}</span>
+              </span>
+            </button>
           </div>
-          <div className="stats">
-            <div className="stat t"><div className="n">{fmt(tok.cin)}</div><div className="k">input tokens</div></div>
+
+          <div className="cols">
+            <section className="col raw">
+              <div className="col-head"><div className="col-title"><span className="cdot" />raw context</div></div>
+              <div className="stats">
+                <div className="stat t"><div className="n">{fmt(tok.nin)}</div><div className="k">input tokens</div></div>
+              </div>
+              <div className="stream" ref={nRef}>
+                <Bubbles list={normal} kind="raw" />
+                {busy && <div className="typing"><span /><span /><span /></div>}
+              </div>
+            </section>
+
+            <section className="col cmp">
+              <div className="col-head">
+                <div className="col-title"><span className="cdot" />compressed context</div>
+                <span className="saved" title="input tokens vs raw context">{saved >= 0 ? "−" : "+"}{Math.abs(saved)}%</span>
+              </div>
+              <div className="stats">
+                <div className="stat t"><div className="n">{fmt(tok.cin)}</div><div className="k">input tokens</div></div>
+              </div>
+              <div className="stream" ref={cRef}>
+                <Bubbles list={comp} kind="cmp" />
+                {busy && <div className="typing"><span /><span /><span /></div>}
+              </div>
+            </section>
           </div>
-          <div className="stream" ref={cRef}>
-            <Bubbles list={comp} kind="cmp" />
-            {busy && <div className="typing"><span /><span /><span /></div>}
-          </div>
-        </section>
+        </div>
       </div>
 
       <div className="composer">
-        {attach && (
-          <div className="attach-chip">
-            {attach.icon === "image" ? <ImageIcon size={15} /> : <FileText size={15} />}
-            <span className="ac-name">{attach.filename}</span>
-            <span className="ac-note">{attach.note}</span>
-            {attach.canCompressFurther && (
-              <button className="ac-further" data-on={attach.compress} onClick={toggleFurther}
-                title="Also run smart_compress() on the extracted text">
-                <Zap size={12} /> compress further
-              </button>
+        {/* input-mode toggle: Normal textarea ↔ Structured zone editor */}
+        <div className="io-mode" role="group" aria-label="input mode">
+          <button className="io-mode-btn" data-on={inputMode === "normal"}
+            onClick={() => setInputMode("normal")}>
+            <Type size={14} /> Normal
+          </button>
+          <button className="io-mode-btn" data-on={inputMode === "structured"}
+            onClick={() => setInputMode("structured")}>
+            <Layers size={14} /> Structured
+          </button>
+        </div>
+
+        {inputMode === "normal" ? (
+          <>
+            {attach && (
+              <div className="attach-chip">
+                {attach.icon === "image" ? <ImageIcon size={15} /> : <FileText size={15} />}
+                <span className="ac-name">{attach.filename}</span>
+                <span className="ac-note">{attach.note}</span>
+                {attach.canCompressFurther && (
+                  <button className="ac-further" data-on={attach.compress} onClick={toggleFurther}
+                    title="Also run smart_compress() on the extracted text">
+                    <Zap size={12} /> compress further
+                  </button>
+                )}
+                <button className="ac-x" onClick={() => setAttach(null)} aria-label="remove attachment"><X size={14} /></button>
+              </div>
             )}
-            <button className="ac-x" onClick={() => setAttach(null)} aria-label="remove attachment"><X size={14} /></button>
+            {prepping && <div className="attach-chip prepping">extracting text…</div>}
+            <div className="composer-in">
+              <input ref={fileRef} type="file" hidden onChange={onPickFile} />
+              <button className="attach-btn" onClick={() => fileRef.current && fileRef.current.click()}
+                disabled={busy || prepping} title="Attach a file (PDF, Word, image, text, code…)">
+                <Paperclip size={18} />
+              </button>
+              <textarea ref={taRef} rows={1} value={input} placeholder="Type a message, or attach a file — it goes to both conversations…"
+                onChange={(e) => { setInput(e.target.value); autosize(e); }} onKeyDown={onKey} />
+              <button className="send" onClick={send} disabled={busy || prepping}>send <Send size={15} /></button>
+            </div>
+          </>
+        ) : (
+          <div className="zone-editor">
+            <p className="ze-help">
+              Assign a compression <b>level</b> to each part of the prompt. Add as many
+              <b style={{ color: "#16a34a" }}> free</b>, <b style={{ color: "#d97706" }}>careful</b>, or
+              <b style={{ color: "#dc2626" }}> protected</b> zones as you need — they're sent top to bottom.
+              The technique toggles above apply to the <b>free</b> zones.
+            </p>
+
+            {zones.length === 0 && (
+              <div className="ze-empty">
+                No zones yet. Add a <b style={{ color: "#16a34a" }}>free</b> instruction to start,
+                then protect the parts that matter.
+              </div>
+            )}
+
+            {zones.map((z, idx) => {
+              const L = LEVELS[z.level];
+              return (
+                <div key={z.id} className="ze-zone" data-level={z.level}>
+                  <span className="ze-bar" />
+                  <div className="ze-main">
+                    <div className="ze-head">
+                      <div className="ze-seg" role="group" aria-label="zone level">
+                        {LEVEL_ORDER.map((lk) => (
+                          <button key={lk} className="ze-seg-btn" data-level={lk} data-on={z.level === lk}
+                            onClick={() => setZoneLevel(z.id, lk)} title={LEVELS[lk].blurb}>
+                            {LEVELS[lk].label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="ze-tools">
+                        <span className="ze-tok" title="rough token estimate">≈{estTok(z.text)}t</span>
+                        <button className="ze-icon" disabled={idx === 0}
+                          onClick={() => moveZone(z.id, -1)} title="Move up"><ArrowUp size={14} /></button>
+                        <button className="ze-icon" disabled={idx === zones.length - 1}
+                          onClick={() => moveZone(z.id, 1)} title="Move down"><ArrowDown size={14} /></button>
+                        <button className="ze-icon ze-del"
+                          onClick={() => removeZone(z.id)} title="Delete zone"><X size={14} /></button>
+                      </div>
+                    </div>
+                    <textarea className="ze-text" rows={z.level === "protected" ? 3 : 2} value={z.text}
+                      placeholder={L.ph} onChange={(e) => setZoneText(z.id, e.target.value)} />
+                    <div className="ze-foot"><span className="ze-dot" />{L.blurb} · {L.use}</div>
+                  </div>
+                </div>
+              );
+            })}
+
+            <div className="ze-add">
+              <span className="ze-add-lab">Add zone</span>
+              {LEVEL_ORDER.map((lk) => (
+                <button key={lk} className="ze-add-btn" data-level={lk}
+                  onClick={() => addZone(lk)} title={LEVELS[lk].blurb}>
+                  <Plus size={13} /> {LEVELS[lk].label}
+                </button>
+              ))}
+              <button className="send ze-send" onClick={send}
+                disabled={busy || prepping || !canSendStructured}>send <Send size={15} /></button>
+            </div>
           </div>
         )}
-        {prepping && <div className="attach-chip prepping">extracting text…</div>}
-        <div className="composer-in">
-          <input ref={fileRef} type="file" hidden onChange={onPickFile} />
-          <button className="attach-btn" onClick={() => fileRef.current && fileRef.current.click()}
-            disabled={busy || prepping} title="Attach a file (PDF, Word, image, text, code…)">
-            <Paperclip size={18} />
-          </button>
-          <textarea ref={taRef} rows={1} value={input} placeholder="Type a message, or attach a file — it goes to both conversations…"
-            onChange={(e) => { setInput(e.target.value); autosize(e); }} onKeyDown={onKey} />
-          <button className="send" onClick={send} disabled={busy || prepping}>send <Send size={15} /></button>
-        </div>
+
         <div className="hint">Token counts are the real figures OpenAI reports per request · Enter to send, Shift+Enter for newline</div>
       </div>
 
