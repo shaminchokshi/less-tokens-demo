@@ -492,3 +492,4 @@ async def do_reduce_image(file: UploadFile = File(...)):
         "markdown_tokens": _ntok(markdown),
         "markdown_chars": len(markdown),
     }
+#end
