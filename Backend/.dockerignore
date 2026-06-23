@@ -1,0 +1,13 @@
+# Backend/.dockerignore — keep the build context small & the image clean
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.git/
+.gitignore
+.env
+*.log

@@ -1,0 +1,58 @@
+# Backend/Dockerfile
+# ---------------------------------------------------------------------------
+# Pin Python to 3.11 so rapidocr-onnxruntime 1.4.x can install.
+#
+# Why this exists: rapidocr-onnxruntime declares `Requires-Python <3.13`, so its
+# 1.3.x / 1.4.x wheels are invisible to pip on Python 3.13. Railway's default
+# (Nixpacks) builder was using 3.13, so pip silently fell back to the unusable
+# 1.2.3 — and less-tokens' reduce_image_ocr() needs >=1.4.0, hence the runtime
+# "Image OCR requires RapidOCR" error. A Dockerfile overrides Nixpacks and lets
+# us fix the interpreter. 3.11 is comfortably inside rapidocr's supported range.
+# ---------------------------------------------------------------------------
+FROM python:3.11-slim-bookworm
+
+# System libraries the OCR / vision stack needs at runtime:
+#   libgl1, libglib2.0-0, libsm6, libxext6, libxrender1  → opencv-python (RapidOCR)
+#   libgomp1                                             → onnxruntime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1 \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender1 \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# Install CPU-only PyTorch FIRST. less-tokens pulls torch (via its semantic
+# extras); the default wheel drags in ~5 GB of NVIDIA CUDA packages that are
+# useless on Railway's CPU hosts and can blow past the image-size limit. Pulling
+# the CPU build up front satisfies that dependency cheaply. If this ever fights a
+# torch version pin in requirements.txt, delete these two lines.
+RUN pip install --upgrade pip \
+    && pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# Python dependencies (layer-cached on requirements.txt alone).
+COPY requirements.txt .
+RUN pip install -r requirements.txt \
+    # Belt-and-suspenders: guarantee the OCR engine version less-tokens' OCR
+    # actually expects, whatever requirements.txt resolved to. On Python 3.11
+    # this lands rapidocr-onnxruntime 1.4.4.
+    && pip install --upgrade "rapidocr-onnxruntime>=1.4.0,<1.5"
+
+# Warm NLTK / WordNet data into the image so the first request isn't slow
+# (mirrors _warm() in main.py). Non-fatal if it can't run at build time.
+RUN python -c "from less_tokens import smart_compress; smart_compress('warm up the model once', remove_filler_phrases=True, remove_stopwords=True, lemmatize=True, pos_keep_only=True, shorten_synonyms=True)" || true
+
+# Application code.
+COPY . .
+
+# Railway injects $PORT; bind to it (fall back to 8000 for local `docker run`).
+EXPOSE 8000
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
