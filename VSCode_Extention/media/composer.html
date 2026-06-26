@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy"
+  content="default-src 'none'; img-src ${cspSource} https: data:; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  :root{
+    /* web brand gradient, layered over VS Code theme tokens */
+    --b1:#3b46e8; --b2:#7140e0; --b3:#9b3fd6;
+    --grad:linear-gradient(90deg,#3b46e8 0%,#7140e0 55%,#9b3fd6 100%);
+    --free:#3fb950; --care:#d29922; --prot:#f85149;
+    --line:var(--vscode-widget-border, var(--vscode-input-border, rgba(128,128,128,.25)));
+    --surface:var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  }
+  *{box-sizing:border-box}
+  body{font-family:var(--vscode-font-family);font-size:13px;color:var(--vscode-foreground);margin:0;padding:14px}
+  .wrap{max-width:580px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+
+  /* header */
+  .head{display:flex;align-items:center;gap:11px}
+  .mark{width:30px;height:30px;border-radius:9px;background:var(--grad);display:grid;place-items:center;
+    color:#fff;font-weight:800;font-size:15px;flex-shrink:0}
+  #logo{width:30px;height:30px;border-radius:8px;object-fit:contain;flex-shrink:0}
+  .titles{display:flex;flex-direction:column;line-height:1.1}
+  .wordmark{font-size:17px;font-weight:800;letter-spacing:-.3px;
+    background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .for{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--vscode-descriptionForeground)}
+  .sub{color:var(--vscode-descriptionForeground);font-size:11.5px;margin:-4px 0 0;line-height:1.5}
+
+  /* mode */
+  .mode{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:3px;gap:3px}
+  .mode button{all:unset;cursor:pointer;padding:7px 16px;border-radius:6px;font-size:12.5px;font-weight:600;
+    color:var(--vscode-descriptionForeground);display:inline-flex;align-items:center;gap:6px}
+  .mode button[data-on="true"]{background:var(--grad);color:#fff}
+  .modehelp{font-size:11px;color:var(--vscode-descriptionForeground);margin:-6px 2px 0}
+
+  textarea{width:100%;min-height:96px;resize:vertical;border-radius:8px;padding:10px 12px;
+    font-family:var(--vscode-font-family);font-size:13px;line-height:1.5;
+    color:var(--vscode-input-foreground);background:var(--vscode-input-background);
+    border:1px solid var(--line);outline:none}
+  textarea:focus{border-color:var(--vscode-focusBorder)}
+
+  /* zones */
+  .legend{display:flex;gap:14px;font-size:11px;color:var(--vscode-descriptionForeground);margin-bottom:8px;flex-wrap:wrap}
+  .legend span{display:inline-flex;align-items:center;gap:5px}
+  .dot{width:8px;height:8px;border-radius:50%}
+  .dot.free{background:var(--free)} .dot.care{background:var(--care)} .dot.prot{background:var(--prot)}
+  .zones{display:flex;flex-direction:column;gap:8px}
+  .zone{border:1px solid var(--line);border-left-width:3px;border-radius:8px;padding:9px;background:var(--surface)}
+  .zone[data-level="free"]{border-left-color:var(--free)}
+  .zone[data-level="careful"]{border-left-color:var(--care)}
+  .zone[data-level="protected"]{border-left-color:var(--prot)}
+  .zhead{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:7px}
+  .seg{display:inline-flex;gap:3px}
+  .seg button{all:unset;cursor:pointer;font-size:11px;font-weight:600;padding:4px 9px;border-radius:6px;
+    color:var(--vscode-descriptionForeground)}
+  .seg button[data-on="true"][data-level="free"]{background:var(--free);color:#08120a}
+  .seg button[data-on="true"][data-level="careful"]{background:var(--care);color:#1a1402}
+  .seg button[data-on="true"][data-level="protected"]{background:var(--prot);color:#1a0605}
+  .ztools{display:flex;gap:4px}
+  .ztools button{all:unset;cursor:pointer;width:23px;height:23px;display:grid;place-items:center;border-radius:6px;
+    color:var(--vscode-descriptionForeground);font-size:13px}
+  .ztools button:hover{background:var(--vscode-toolbar-hoverBackground)}
+  .ztools button[disabled]{opacity:.35;cursor:default}
+  .zone textarea{min-height:46px}
+  .addrow{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+  .addrow .lab{font-size:11px;color:var(--vscode-descriptionForeground)}
+  .addrow button{all:unset;cursor:pointer;font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:7px;border:1px solid currentColor}
+  .addrow button[data-level="free"]{color:var(--free)}
+  .addrow button[data-level="careful"]{color:var(--care)}
+  .addrow button[data-level="protected"]{color:var(--prot)}
+
+  /* attach + decision card */
+  .section-lab{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--vscode-descriptionForeground);margin-bottom:6px}
+  .btn{all:unset;cursor:pointer;font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:8px;
+    background:var(--vscode-button-secondaryBackground, var(--surface));
+    color:var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+    border:1px solid var(--line);display:inline-flex;align-items:center;gap:7px}
+  .btn:hover{background:var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground))}
+  .card{border:1px solid var(--line);border-radius:9px;padding:12px;background:var(--surface);
+    box-shadow:inset 0 0 0 9999px rgba(113,64,224,.04)}
+  .card h4{margin:0 0 5px;font-size:13px;font-weight:700}
+  .card p{margin:0 0 11px;font-size:11.5px;line-height:1.5;color:var(--vscode-descriptionForeground)}
+  .card .opts{display:flex;gap:8px;flex-wrap:wrap}
+  .card .opts .btn.primary{background:var(--grad);color:#fff;border:none}
+  .chip{display:flex;align-items:center;gap:8px;font-size:12px;padding:7px 11px;border-radius:8px;
+    background:var(--surface);border:1px solid var(--line);flex-wrap:wrap}
+  .chip .nm{font-weight:600}
+  .chip .kd{color:var(--vscode-descriptionForeground);font-size:11px}
+  .chip .x{cursor:pointer;color:var(--vscode-descriptionForeground);margin-left:auto}
+  label.ck{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--vscode-descriptionForeground);cursor:pointer}
+  .reftip{font-size:11px;color:var(--care);margin-top:6px;line-height:1.45}
+
+  details{border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+  summary{cursor:pointer;padding:9px 12px;font-size:12px;font-weight:600;user-select:none}
+  .flags{display:grid;grid-template-columns:1fr 1fr;gap:7px 16px;padding:4px 12px 12px}
+  .flag{display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer}
+  .flag input{accent-color:var(--b2)}
+
+  .preview{border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .pvh{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;font-size:11px;
+    text-transform:uppercase;letter-spacing:.04em;color:var(--vscode-descriptionForeground);background:var(--surface)}
+  .pvh .saved{font-weight:700;color:var(--free)}
+  pre{margin:0;padding:12px;max-height:230px;overflow:auto;white-space:pre-wrap;word-break:break-word;
+    font-family:var(--vscode-editor-font-family,monospace);font-size:12px;line-height:1.5;
+    background:var(--vscode-textCodeBlock-background, transparent)}
+  .dim{color:var(--vscode-descriptionForeground)}
+  .err{color:var(--vscode-errorForeground);font-size:12.5px}
+
+  .actions{display:flex;gap:8px;align-items:center}
+  .spacer{flex:1}
+  .primary{background:var(--grad);color:#fff;border:none;font-weight:700}
+  .primary:hover{filter:brightness(1.08)}
+  .hint{font-size:11px;color:var(--vscode-descriptionForeground);text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <img id="logo" src="${logoUri}" alt="" />
+    <span class="mark" id="mark" style="display:none">L</span>
+    <div class="titles">
+      <span class="wordmark">Less Tokens</span>
+      <span class="for">for Cursor &amp; VS Code</span>
+    </div>
+  </div>
+  <p class="sub">Compose a prompt, compress it, then insert it into chat. Code, tables, URLs &amp; math are preserved — only prose shrinks.</p>
+
+  <div>
+    <div class="mode" id="mode">
+      <button data-mode="normal" data-on="true">Normal</button>
+      <button data-mode="structured" data-on="false">Structured</button>
+    </div>
+    <p class="modehelp" id="modehelp">One prompt, compressed as a whole.</p>
+  </div>
+
+  <div id="normalBox">
+    <textarea id="prompt" placeholder="Type your prompt…"></textarea>
+  </div>
+
+  <div id="structuredBox" style="display:none">
+    <div class="legend">
+      <span><i class="dot free"></i>Free — full compression</span>
+      <span><i class="dot care"></i>Careful — safe only</span>
+      <span><i class="dot prot"></i>Protected — untouched</span>
+    </div>
+    <div class="zones" id="zones"></div>
+    <div class="addrow">
+      <span class="lab">Add zone</span>
+      <button id="addFree" data-level="free">+ Free</button>
+      <button id="addCareful" data-level="careful">+ Careful</button>
+      <button id="addProtected" data-level="protected">+ Protected</button>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-lab">Attach context</div>
+    <div id="attachArea">
+      <button class="btn" id="attachBtn">📎 Attach image / PDF / Word…</button>
+    </div>
+  </div>
+
+  <details>
+    <summary>Compression techniques</summary>
+    <div class="flags" id="flags"></div>
+  </details>
+
+  <div class="preview">
+    <div class="pvh"><span>Compressed preview</span><span id="stats" class="saved"></span></div>
+    <pre id="out"><span class="dim">Click “Compress” to preview.</span></pre>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="compressBtn">Compress</button>
+    <button class="btn" id="copyBtn">Copy</button>
+    <span class="spacer"></span>
+    <button class="btn primary" id="insertBtn">Insert into chat ▸</button>
+  </div>
+  <p class="hint">Insert copies the result and prefills the chat input where supported — review, then send.</p>
+</div>
+
+<script nonce="${nonce}">
+const vscode = acquireVsCodeApi();
+
+const FLAG_DEFS = [
+  ["remove_filler_phrases","filler phrases"],["apply_abbreviations","abbreviations"],
+  ["apply_contractions","contractions"],["remove_filler_words","filler words"],
+  ["remove_stopwords","stopwords"],["remove_function_words","function words"],
+  ["pos_keep_only","POS-keep"],["lemmatize","lemmatize"],["shorten_synonyms","synonyms"],
+  ["preserve_named_entities","protect names"],["normalize_whitespace_punct","normalize"],
+];
+const DEFAULT_FLAGS = {
+  remove_filler_phrases:true, apply_abbreviations:true, apply_contractions:true,
+  remove_filler_words:true, remove_stopwords:true, remove_function_words:false,
+  pos_keep_only:false, lemmatize:false, shorten_synonyms:false,
+  preserve_named_entities:true, normalize_whitespace_punct:true,
+};
+const PH = {
+  free:"Instruction body — compressed hard…",
+  careful:"Rules & constraints — meaning preserved…",
+  protected:'Output format — sent exactly, e.g. {"k":"v"}',
+};
+
+const state = {
+  mode:"normal", prompt:"", zones:[], flags:{...DEFAULT_FLAGS},
+  attachment:null, compressFurther:false, compressed:"", pendingInsert:false,
+};
+const $ = (id) => document.getElementById(id);
+const estTok = (s) => s ? Math.max(1, Math.round(s.length/4)) : 0;
+const uid = () => Math.random().toString(36).slice(2,8);
+const el = (tag, cls) => { const e=document.createElement(tag); if(cls) e.className=cls; return e; };
+
+// logo fallback
+(function(){
+  const lg=$("logo"), mk=$("mark");
+  const showMark=()=>{ lg.style.display="none"; mk.style.display="grid"; };
+  if(!lg.getAttribute("src")) showMark();
+  lg.addEventListener("error", showMark);
+})();
+
+// techniques
+function renderFlags(){
+  $("flags").innerHTML="";
+  for(const [key,name] of FLAG_DEFS){
+    const l=el("label","flag"); const cb=el("input"); cb.type="checkbox"; cb.checked=!!state.flags[key];
+    cb.addEventListener("change",()=>{ state.flags[key]=cb.checked; });
+    l.appendChild(cb); l.appendChild(document.createTextNode(name)); $("flags").appendChild(l);
+  }
+}
+
+// mode
+$("mode").addEventListener("click",(e)=>{
+  const b=e.target.closest("button"); if(!b) return;
+  state.mode=b.dataset.mode;
+  [...$("mode").children].forEach(c=>c.dataset.on=String(c.dataset.mode===state.mode));
+  $("normalBox").style.display = state.mode==="normal" ? "" : "none";
+  $("structuredBox").style.display = state.mode==="structured" ? "" : "none";
+  $("modehelp").textContent = state.mode==="normal"
+    ? "One prompt, compressed as a whole."
+    : "Mix zones: free (squeezed), careful (safe), protected (verbatim).";
+});
+$("prompt").addEventListener("input",(e)=>{ state.prompt=e.target.value; });
+
+// zones
+function addZone(level){ state.zones.push({id:uid(), text:"", level}); renderZones(); }
+function removeZone(id){ state.zones=state.zones.filter(z=>z.id!==id); renderZones(); }
+function setLevel(id,level){ const z=state.zones.find(z=>z.id===id); if(z){ z.level=level; renderZones(); } }
+function moveZone(id,dir){
+  const i=state.zones.findIndex(z=>z.id===id), j=i+dir;
+  if(j<0||j>=state.zones.length) return;
+  const n=state.zones.slice(); [n[i],n[j]]=[n[j],n[i]]; state.zones=n; renderZones();
+}
+$("addFree").addEventListener("click",()=>addZone("free"));
+$("addCareful").addEventListener("click",()=>addZone("careful"));
+$("addProtected").addEventListener("click",()=>addZone("protected"));
+function renderZones(){
+  const root=$("zones"); root.innerHTML="";
+  state.zones.forEach((z,idx)=>{
+    const node=el("div","zone"); node.dataset.level=z.level;
+    const head=el("div","zhead");
+    const seg=el("div","seg");
+    ["free","careful","protected"].forEach(lk=>{
+      const b=el("button"); b.textContent=lk[0].toUpperCase()+lk.slice(1);
+      b.dataset.level=lk; b.dataset.on=String(z.level===lk);
+      b.addEventListener("click",()=>setLevel(z.id,lk)); seg.appendChild(b);
+    });
+    const tools=el("div","ztools");
+    const up=el("button"); up.textContent="↑"; up.disabled=idx===0; up.addEventListener("click",()=>moveZone(z.id,-1));
+    const dn=el("button"); dn.textContent="↓"; dn.disabled=idx===state.zones.length-1; dn.addEventListener("click",()=>moveZone(z.id,1));
+    const rm=el("button"); rm.textContent="✕"; rm.addEventListener("click",()=>removeZone(z.id));
+    tools.append(up,dn,rm); head.append(seg,tools);
+    const ta=el("textarea"); ta.value=z.text; ta.placeholder=PH[z.level];
+    ta.addEventListener("input",()=>{ z.text=ta.value; });
+    node.append(head,ta); root.appendChild(node);
+  });
+}
+
+// attach
+$("attachBtn").addEventListener("click",()=>vscode.postMessage({type:"pickFile"}));
+
+function renderAttachIdle(){
+  const a=$("attachArea"); a.innerHTML="";
+  const b=el("button","btn"); b.id="attachBtn2"; b.textContent="📎 Attach image / PDF / Word…";
+  b.addEventListener("click",()=>vscode.postMessage({type:"pickFile"}));
+  a.appendChild(b);
+}
+function renderAskKind(filename, category){
+  const a=$("attachArea"); a.innerHTML="";
+  const card=el("div","card");
+  const h=el("h4"); const p=el("p"); const opts=el("div","opts");
+  const yes=el("button","btn primary"); const no=el("button","btn");
+  if(category==="image"){
+    h.textContent="Does this image contain text you need?";
+    p.textContent="OCR pulls the text out and drops the picture — big token savings, but only the words survive. If the picture itself matters, attach it directly in chat instead.";
+    yes.textContent="Yes — it's mostly text → OCR";
+    no.textContent="No — the picture matters";
+    yes.addEventListener("click",()=>{ vscode.postMessage({type:"process", choice:"ocr"}); });
+    no.addEventListener("click",()=>{ vscode.postMessage({type:"process", choice:"full"}); });
+  } else {
+    h.textContent="Do you only need the content?";
+    p.textContent="We'll extract just the text — no layout, fonts, page numbers or metadata. If formatting matters, attach the file directly in chat instead.";
+    yes.textContent="Only content → extract text";
+    no.textContent="Formatting matters";
+    yes.addEventListener("click",()=>{ vscode.postMessage({type:"process", choice:"content"}); });
+    no.addEventListener("click",()=>{ vscode.postMessage({type:"process", choice:"full"}); });
+  }
+  const cancel=el("button","btn"); cancel.textContent="Cancel"; cancel.addEventListener("click",renderAttachIdle);
+  opts.append(yes,no,cancel); card.append(h,p,opts); a.appendChild(card);
+}
+function renderPrepping(filename){
+  const a=$("attachArea"); a.innerHTML="";
+  const c=el("div","chip dim"); c.textContent='extracting “'+filename+'”…'; a.appendChild(c);
+}
+function renderChip(){
+  const a=$("attachArea"); a.innerHTML="";
+  const at=state.attachment; if(!at){ renderAttachIdle(); return; }
+  const chip=el("div","chip");
+  const nm=el("span","nm"); nm.textContent=at.filename;
+  const kd=el("span","kd"); kd.textContent="· "+at.kind+(at.reference?"":" · ≈"+estTok(at.markdown)+"t");
+  chip.append(nm,kd);
+  if(!at.reference){
+    const cf=el("label","ck"); const cb=el("input"); cb.type="checkbox"; cb.checked=state.compressFurther;
+    cb.addEventListener("change",()=>{ state.compressFurther=cb.checked; });
+    cf.append(cb, document.createTextNode("compress further")); chip.appendChild(cf);
+  }
+  const x=el("span","x"); x.textContent="✕";
+  x.addEventListener("click",()=>{ state.attachment=null; state.compressFurther=false; renderAttachIdle(); refreshRefTip(); });
+  chip.appendChild(x);
+  a.appendChild(chip);
+  if(at.reference){
+    const tip=el("div","reftip");
+    tip.textContent="↳ Attach “"+at.filename+"” directly in your chat — it isn't part of the text prompt.";
+    a.appendChild(tip);
+  }
+}
+function refreshRefTip(){ /* tip is re-rendered with chip; nothing extra needed */ }
+
+// assembly (for before-count)
+function rawHead(){
+  if(state.mode==="structured") return state.zones.map(z=>z.text).filter(t=>t.trim()).join("\n\n");
+  return state.prompt;
+}
+function rawAll(){
+  const body = state.attachment && !state.attachment.reference ? state.attachment.markdown : "";
+  return [rawHead(), body].filter(x=>x&&x.trim()).join("\n\n");
+}
+
+// actions
+function doCompress(){
+  $("out").innerHTML='<span class="dim">Compressing…</span>'; $("stats").textContent="";
+  vscode.postMessage({type:"compress", payload:{
+    mode:state.mode, prompt:state.prompt, zones:state.zones, flags:state.flags,
+    body: state.attachment && !state.attachment.reference ? state.attachment.markdown : "",
+    compressFurther: state.compressFurther,
+  }});
+}
+$("compressBtn").addEventListener("click",doCompress);
+$("copyBtn").addEventListener("click",()=>vscode.postMessage({type:"copy", text: state.compressed || rawAll()}));
+$("insertBtn").addEventListener("click",()=>{
+  if(state.compressed){ vscode.postMessage({type:"insert", text:state.compressed}); }
+  else { state.pendingInsert=true; doCompress(); }
+});
+
+// host messages
+window.addEventListener("message",(e)=>{
+  const m=e.data;
+  if(m.type==="askKind"){ renderAskKind(m.filename, m.category); }
+  else if(m.type==="prepping"){ renderPrepping(m.filename); }
+  else if(m.type==="attached"){ state.attachment={filename:m.filename, kind:m.kind, markdown:m.markdown, reference:false}; renderChip(); }
+  else if(m.type==="attachedRef"){ state.attachment={filename:m.filename, kind:m.kind, markdown:"", reference:true}; renderChip(); }
+  else if(m.type==="result"){
+    state.compressed=m.compressed||"";
+    const before=estTok(rawAll()), after=estTok(state.compressed);
+    const pct=before>0?Math.round((1-after/before)*100):0;
+    $("out").textContent = state.compressed || "(empty)";
+    $("stats").textContent = "−"+pct+"%  ·  "+before+"→"+after+" tok (est)";
+    if(state.pendingInsert){ state.pendingInsert=false; vscode.postMessage({type:"insert", text:state.compressed}); }
+  } else if(m.type==="error"){
+    state.pendingInsert=false;
+    $("out").innerHTML='<span class="err">⚠ '+(m.message||"error")+'</span>'; $("stats").textContent="";
+  }
+});
+
+renderFlags(); renderZones();
+</script>
+</body>
+</html>

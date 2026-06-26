@@ -1,0 +1,120 @@
+{
+  "name": "less-tokens",
+  "displayName": "Less Tokens for Cursor and VS Code",
+  "description": "A prompt compressor for Cursor / Copilot: compose, pick techniques, attach files (OCR / reduce), compress, and insert — fewer context tokens, same meaning.",
+  "version": "0.3.0",
+  "publisher": "shaminchokshi",
+  "license": "MIT",
+  "icon": "media/logo.png",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other",
+    "Formatters"
+  ],
+  "keywords": [
+    "tokens",
+    "compression",
+    "cursor",
+    "copilot",
+    "llm",
+    "context"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "lessTokens.openComposer",
+        "title": "Open Prompt Compressor",
+        "category": "less-tokens"
+      },
+      {
+        "command": "lessTokens.compressSelection",
+        "title": "Compress Selection (to clipboard)",
+        "category": "less-tokens"
+      },
+      {
+        "command": "lessTokens.compressClipboard",
+        "title": "Compress Clipboard",
+        "category": "less-tokens"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "lessTokens.compressSelection",
+          "when": "editorHasSelection",
+          "group": "1_modification@99"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "lessTokens.openComposer",
+        "key": "ctrl+alt+k",
+        "mac": "cmd+alt+k"
+      },
+      {
+        "command": "lessTokens.compressSelection",
+        "key": "ctrl+alt+l",
+        "mac": "cmd+alt+l",
+        "when": "editorTextFocus && editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "less-tokens",
+      "properties": {
+        "lessTokens.apiUrl": {
+          "type": "string",
+          "default": "https://less-tokens-demo-production.up.railway.app",
+          "markdownDescription": "Base URL of your less-tokens FastAPI backend. Local: `http://localhost:8000`. Or your deployed URL, e.g. `https://less-tokens-demo-production.up.railway.app`."
+        },
+        "lessTokens.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a status-bar button that opens the prompt compressor."
+        },
+        "lessTokens.flags": {
+          "type": "object",
+          "description": "Which of the eleven less-tokens techniques to apply. Maps 1:1 to the backend Flags model.",
+          "default": {
+            "remove_filler_phrases": true,
+            "apply_abbreviations": true,
+            "apply_contractions": true,
+            "remove_filler_words": true,
+            "remove_stopwords": true,
+            "remove_function_words": false,
+            "pos_keep_only": false,
+            "lemmatize": false,
+            "shorten_synonyms": false,
+            "preserve_named_entities": true,
+            "normalize_whitespace_punct": true
+          },
+          "properties": {
+            "remove_filler_phrases": { "type": "boolean" },
+            "apply_abbreviations": { "type": "boolean" },
+            "apply_contractions": { "type": "boolean" },
+            "remove_filler_words": { "type": "boolean" },
+            "remove_stopwords": { "type": "boolean" },
+            "remove_function_words": { "type": "boolean" },
+            "pos_keep_only": { "type": "boolean" },
+            "lemmatize": { "type": "boolean" },
+            "shorten_synonyms": { "type": "boolean" },
+            "preserve_named_entities": { "type": "boolean" },
+            "normalize_whitespace_punct": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^2.21.0"
+  }
+}
