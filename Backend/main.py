@@ -16,6 +16,8 @@ This version adds:
   * Zone-aware structured compression via POST /compress_structured, so a prompt
     that mixes a compressible instruction with rules and an output schema can be
     compressed per-zone (free / careful / protected).
+  * Accounts, email verification (Resend) and the extension subscription, mounted
+    from accounts.py and backed by the MySQL pool in db.py.
 
 What it still does NOT do: it never sees your OpenAI key, and it stores nothing —
 uploaded files are written to a temp path, parsed, and deleted in the same request.
@@ -70,6 +72,10 @@ except Exception:  # pragma: no cover
     def _ntok(s: str) -> int:
         return len((s or "").split())
 
+# --- accounts / subscription (MySQL) -----------------------------------------
+import db
+from accounts import router as accounts_router
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("less-tokens")
@@ -119,8 +125,19 @@ def _compress_structured_call(zones: list, flags: dict) -> dict:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Warm the main process, spin up a pre-warmed pool, tear it down on exit."""
+    """Connect the DB, warm the main process, spin up a pre-warmed pool, and
+    tear it all down on exit."""
     global _pool
+
+    # Database pool for accounts/subscription. Don't hard-fail the whole API if
+    # it's misconfigured — the compression endpoints still work without it; the
+    # account routes will simply error until DATABASE_URL is set.
+    try:
+        await db.connect()
+        logger.info("Database pool connected.")
+    except Exception as exc:
+        logger.warning("Database unavailable (%s); account routes will error.", exc)
+
     _warm()  # warm main first; on Linux (fork) workers inherit this state
     try:
         _pool = ProcessPoolExecutor(max_workers=_WORKERS, initializer=_warm)
@@ -133,6 +150,10 @@ async def lifespan(app: FastAPI):
     finally:
         if _pool is not None:
             _pool.shutdown(cancel_futures=True)
+        try:
+            await db.disconnect()
+        except Exception:
+            pass
 
 
 app = FastAPI(title="less-tokens API", version="2.2.0", lifespan=lifespan)
@@ -146,6 +167,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Account, email-verification, pricing & subscription routes.
+app.include_router(accounts_router)
 
 
 # ---------------------------------------------------------------------------
