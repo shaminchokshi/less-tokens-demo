@@ -18,7 +18,7 @@
 -- -----------------------------------------------------------------------------
 -- One row per price, per product, with the moment it takes effect. The "current"
 -- price for a date is the latest row whose effective_from <= that date.
-Create Database LessTokensWeb
+
 CREATE TABLE IF NOT EXISTS pricing (
     id              BIGINT        NOT NULL AUTO_INCREMENT,
     product_code    VARCHAR(40)   NOT NULL DEFAULT 'extension',
