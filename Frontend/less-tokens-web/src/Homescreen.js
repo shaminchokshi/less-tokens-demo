@@ -357,44 +357,28 @@ export default function HomeScreen({ onLaunch }) {
                 </div>
                  
                 {/* thin extension */}
-           {/*  <div className="card acct ext-thin">
+                <div className="card acct ext-thin">
                   <div className="ext-ic"><Zap size={18} /></div>
                   <h3 className="ext-title">Extension</h3>
-                  <p className="ext-tag">VS Code &amp; Cursor</p>
+                  <p className="ext-tag">VS Code</p>
 
-                  <div className="ext-logos">
-                    <span className="compat-chip"><VSCodeMark size={14} /> VS Code</span>
-                    <span className="compat-chip"><CursorMark size={14} /> Cursor</span>
+                  <div className="ext-logos" style={{ justifyContent: "center", padding: "6px 0 12px" }}>
+                    <VSCodeMark size={64} />
                   </div>
 
-                  <div className="ext-price"><b>{priceLabel}</b><span>/mo</span></div>
-
                   <ul className="ext-feat">
-                    <li><Check size={13} /> 11 techniques</li>
-                    <li><Check size={13} /> Composer + zones</li>
-                    <li><Check size={13} /> OCR &amp; docs</li>
+                    <li><Check size={13} /> 11 Compression techniques</li>
+                    <li><Check size={13} /> Composer + zone aware compression</li>
+                    <li><Check size={13} /> Image and Doc Compression</li>
                   </ul>
 
-                  {!user && <p className="ext-gate">Sign in to subscribe.</p>}
-
-                  {user && !subscribed && (
-                    <button className="btn btn-grad ext-btn" disabled={busy} onClick={onSubscribe}>
-                      {busy ? <Loader2 size={15} className="acct-spin" /> : <Sparkles size={15} />} Subscribe
-                    </button>
-                  )}
-
-                  {user && subscribed && (
-                    <>
-                      <div className="ext-status live">
-                        <span className="sdot" /> Active · day {subDay(user.extension_subscription_date)}
-                      </div>
-                      <button className="ext-cancel" disabled={busy} onClick={onCancel}>
-                        {busy ? <Loader2 size={13} className="acct-spin" /> : <X size={13} />} Cancel
-                      </button>
-                      <p className="ext-mini">Since {subDate(user.extension_subscription_date)}</p>
-                    </>
-                  )}
-                </div> */}
+                  <button
+                    className="btn btn-grad ext-btn"
+                    onClick={() => window.open("https://marketplace.visualstudio.com/items?itemName=shaminchokshi.less-tokens", "_blank", "noopener,noreferrer")}
+                  >
+                    <VSCodeMark size={15} /> Get it on VS Code
+                  </button>
+                </div>
 
               </div>
             </aside>

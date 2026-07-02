@@ -3,387 +3,521 @@
 <head>
 <meta charset="UTF-8" />
 <meta http-equiv="Content-Security-Policy"
-  content="default-src 'none'; img-src ${cspSource} https: data:; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
+      content="default-src 'none'; img-src ${cspSource} https: data:; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Less Tokens</title>
 <style>
-  :root{
-    /* web brand gradient, layered over VS Code theme tokens */
-    --b1:#3b46e8; --b2:#7140e0; --b3:#9b3fd6;
-    --grad:linear-gradient(90deg,#3b46e8 0%,#7140e0 55%,#9b3fd6 100%);
-    --free:#3fb950; --care:#d29922; --prot:#f85149;
-    --line:var(--vscode-widget-border, var(--vscode-input-border, rgba(128,128,128,.25)));
-    --surface:var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  :root {
+    --brand: #7c6cff;
+    --brand-2: #4aa3ff;
+    --ok: #35c26b;
+    --warn: #e5a13a;
+    --err: #e5534b;
+    /* zone level colors */
+    --z-free: #7c6cff;      /* full compression */
+    --z-careful: #e5a13a;   /* safe passes only */
+    --z-protected: #35c26b; /* untouched */
+    --radius: 10px;
+    --gap: 14px;
+    --fg: var(--vscode-foreground);
+    --muted: var(--vscode-descriptionForeground);
+    --panel: var(--vscode-editorWidget-background, rgba(127,127,127,.06));
+    --border: var(--vscode-widget-border, rgba(127,127,127,.28));
+    --input-bg: var(--vscode-input-background);
+    --input-fg: var(--vscode-input-foreground);
+    --input-border: var(--vscode-input-border, var(--border));
   }
-  *{box-sizing:border-box}
-  body{font-family:var(--vscode-font-family);font-size:13px;color:var(--vscode-foreground);margin:0;padding:14px}
-  .wrap{max-width:580px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size, 13px); color: var(--fg); background: transparent; line-height: 1.5; }
+  .eyebrow { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 
-  /* header */
-  .head{display:flex;align-items:center;gap:11px}
-  .mark{width:30px;height:30px;border-radius:9px;background:var(--grad);display:grid;place-items:center;
-    color:#fff;font-weight:800;font-size:15px;flex-shrink:0}
-  #logo{width:30px;height:30px;border-radius:8px;object-fit:contain;flex-shrink:0}
-  .titles{display:flex;flex-direction:column;line-height:1.1}
-  .wordmark{font-size:17px;font-weight:800;letter-spacing:-.3px;
-    background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .for{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--vscode-descriptionForeground)}
-  .sub{color:var(--vscode-descriptionForeground);font-size:11.5px;margin:-4px 0 0;line-height:1.5}
+  header {
+    position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px;
+    padding: 12px 18px; background: var(--vscode-editor-background); border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 650; letter-spacing: -.01em; }
+  .brand .mark { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; flex: none; }
+  .brand .lt { font-size: 14px; }
+  .brand .lt b { font-weight: 750; }
+  .spacer { flex: 1; }
 
-  /* mode */
-  .mode{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:3px;gap:3px}
-  .mode button{all:unset;cursor:pointer;padding:7px 16px;border-radius:6px;font-size:12.5px;font-weight:600;
-    color:var(--vscode-descriptionForeground);display:inline-flex;align-items:center;gap:6px}
-  .mode button[data-on="true"]{background:var(--grad);color:#fff}
-  .modehelp{font-size:11px;color:var(--vscode-descriptionForeground);margin:-6px 2px 0}
+  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; border: 1px solid var(--border); background: var(--panel); color: var(--muted); user-select: none; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .pill.ok  { color: var(--ok);   border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+  .pill.ok .dot  { background: var(--ok); animation: pulse 2s infinite; }
+  .pill.off { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+  .pill.off .dot { background: var(--warn); }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent); } 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 
-  textarea{width:100%;min-height:96px;resize:vertical;border-radius:8px;padding:10px 12px;
-    font-family:var(--vscode-font-family);font-size:13px;line-height:1.5;
-    color:var(--vscode-input-foreground);background:var(--vscode-input-background);
-    border:1px solid var(--line);outline:none}
-  textarea:focus{border-color:var(--vscode-focusBorder)}
+  .chip { display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
+  .chip .who { color: var(--fg); font-weight: 600; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .linkbtn { background: none; border: none; color: var(--brand); cursor: pointer; padding: 0; font: inherit; }
+  .linkbtn:hover { text-decoration: underline; }
 
-  /* zones */
-  .legend{display:flex;gap:14px;font-size:11px;color:var(--vscode-descriptionForeground);margin-bottom:8px;flex-wrap:wrap}
-  .legend span{display:inline-flex;align-items:center;gap:5px}
-  .dot{width:8px;height:8px;border-radius:50%}
-  .dot.free{background:var(--free)} .dot.care{background:var(--care)} .dot.prot{background:var(--prot)}
-  .zones{display:flex;flex-direction:column;gap:8px}
-  .zone{border:1px solid var(--line);border-left-width:3px;border-radius:8px;padding:9px;background:var(--surface)}
-  .zone[data-level="free"]{border-left-color:var(--free)}
-  .zone[data-level="careful"]{border-left-color:var(--care)}
-  .zone[data-level="protected"]{border-left-color:var(--prot)}
-  .zhead{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:7px}
-  .seg{display:inline-flex;gap:3px}
-  .seg button{all:unset;cursor:pointer;font-size:11px;font-weight:600;padding:4px 9px;border-radius:6px;
-    color:var(--vscode-descriptionForeground)}
-  .seg button[data-on="true"][data-level="free"]{background:var(--free);color:#08120a}
-  .seg button[data-on="true"][data-level="careful"]{background:var(--care);color:#1a1402}
-  .seg button[data-on="true"][data-level="protected"]{background:var(--prot);color:#1a0605}
-  .ztools{display:flex;gap:4px}
-  .ztools button{all:unset;cursor:pointer;width:23px;height:23px;display:grid;place-items:center;border-radius:6px;
-    color:var(--vscode-descriptionForeground);font-size:13px}
-  .ztools button:hover{background:var(--vscode-toolbar-hoverBackground)}
-  .ztools button[disabled]{opacity:.35;cursor:default}
-  .zone textarea{min-height:46px}
-  .addrow{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
-  .addrow .lab{font-size:11px;color:var(--vscode-descriptionForeground)}
-  .addrow button{all:unset;cursor:pointer;font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:7px;border:1px solid currentColor}
-  .addrow button[data-level="free"]{color:var(--free)}
-  .addrow button[data-level="careful"]{color:var(--care)}
-  .addrow button[data-level="protected"]{color:var(--prot)}
+  main { padding: 18px; max-width: 720px; margin: 0 auto; }
 
-  /* attach + decision card */
-  .section-lab{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--vscode-descriptionForeground);margin-bottom:6px}
-  .btn{all:unset;cursor:pointer;font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:8px;
-    background:var(--vscode-button-secondaryBackground, var(--surface));
-    color:var(--vscode-button-secondaryForeground, var(--vscode-foreground));
-    border:1px solid var(--line);display:inline-flex;align-items:center;gap:7px}
-  .btn:hover{background:var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground))}
-  .card{border:1px solid var(--line);border-radius:9px;padding:12px;background:var(--surface);
-    box-shadow:inset 0 0 0 9999px rgba(113,64,224,.04)}
-  .card h4{margin:0 0 5px;font-size:13px;font-weight:700}
-  .card p{margin:0 0 11px;font-size:11.5px;line-height:1.5;color:var(--vscode-descriptionForeground)}
-  .card .opts{display:flex;gap:8px;flex-wrap:wrap}
-  .card .opts .btn.primary{background:var(--grad);color:#fff;border:none}
-  .chip{display:flex;align-items:center;gap:8px;font-size:12px;padding:7px 11px;border-radius:8px;
-    background:var(--surface);border:1px solid var(--line);flex-wrap:wrap}
-  .chip .nm{font-weight:600}
-  .chip .kd{color:var(--vscode-descriptionForeground);font-size:11px}
-  .chip .x{cursor:pointer;color:var(--vscode-descriptionForeground);margin-left:auto}
-  label.ck{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--vscode-descriptionForeground);cursor:pointer}
-  .reftip{font-size:11px;color:var(--care);margin-top:6px;line-height:1.45}
+  label.field { display: block; margin-bottom: 12px; }
+  label.field > .lab { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 600; }
+  input[type=text], input[type=email], input[type=password], input[type=tel], textarea, select {
+    width: 100%; color: var(--input-fg); background: var(--input-bg); border: 1px solid var(--input-border);
+    border-radius: 8px; padding: 9px 11px; font: inherit; outline: none; resize: vertical;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--brand); }
+  textarea { min-height: 96px; line-height: 1.5; }
 
-  details{border:1px solid var(--line);border-radius:8px;background:var(--surface)}
-  summary{cursor:pointer;padding:9px 12px;font-size:12px;font-weight:600;user-select:none}
-  .flags{display:grid;grid-template-columns:1fr 1fr;gap:7px 16px;padding:4px 12px 12px}
-  .flag{display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer}
-  .flag input{accent-color:var(--b2)}
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--border); background: var(--vscode-button-secondaryBackground, var(--panel)); color: var(--vscode-button-secondaryForeground, var(--fg)); padding: 8px 14px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+  .btn:hover { background: var(--vscode-button-secondaryHoverBackground, rgba(127,127,127,.12)); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.primary { border: none; color: #fff; background: linear-gradient(135deg, var(--brand), var(--brand-2)); }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn.ghost { background: none; }
+  .btn.sm { padding: 5px 10px; font-size: 12px; }
 
-  .preview{border:1px solid var(--line);border-radius:9px;overflow:hidden}
-  .pvh{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;font-size:11px;
-    text-transform:uppercase;letter-spacing:.04em;color:var(--vscode-descriptionForeground);background:var(--surface)}
-  .pvh .saved{font-weight:700;color:var(--free)}
-  pre{margin:0;padding:12px;max-height:230px;overflow:auto;white-space:pre-wrap;word-break:break-word;
-    font-family:var(--vscode-editor-font-family,monospace);font-size:12px;line-height:1.5;
-    background:var(--vscode-textCodeBlock-background, transparent)}
-  .dim{color:var(--vscode-descriptionForeground)}
-  .err{color:var(--vscode-errorForeground);font-size:12.5px}
+  .card { border: 1px solid var(--border); background: var(--panel); border-radius: var(--radius); padding: 16px; }
+  .msg { border-radius: 8px; padding: 9px 12px; font-size: 12.5px; margin-bottom: 12px; display: none; }
+  .msg.show { display: block; }
+  .msg.err { color: var(--err); background: color-mix(in srgb, var(--err) 12%, transparent); border: 1px solid color-mix(in srgb, var(--err) 35%, transparent); }
+  .msg.ok  { color: var(--ok);  background: color-mix(in srgb, var(--ok) 12%, transparent);  border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent); }
 
-  .actions{display:flex;gap:8px;align-items:center}
-  .spacer{flex:1}
-  .primary{background:var(--grad);color:#fff;border:none;font-weight:700}
-  .primary:hover{filter:brightness(1.08)}
-  .hint{font-size:11px;color:var(--vscode-descriptionForeground);text-align:center;line-height:1.5}
+  /* ── auth ───────────────────────────────────────────── */
+  #auth { display: none; }
+  #auth.show { display: block; }
+  .auth-wrap { max-width: 400px; margin: 5vh auto 0; }
+  .auth-wrap h1 { font-size: 20px; margin: 12px 0 4px; letter-spacing: -.01em; }
+  .auth-wrap p.sub { color: var(--muted); margin: 0 0 16px; font-size: 12.5px; }
+  .tabs { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); margin-bottom: var(--gap); }
+  .tabs button { border: none; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 6px 14px; border-radius: 7px; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--vscode-editor-background); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* ── app ────────────────────────────────────────────── */
+  #app { display: none; }
+  #app.show { display: block; }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .between { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+
+  /* techniques — always visible, on top */
+  .tech-card { margin-bottom: var(--gap); }
+  .tech-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+  .tog { display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; }
+  .tog input { width: 15px; height: 15px; accent-color: var(--brand); }
+
+  /* color-coded zones */
+  .legend { display: flex; gap: 14px; font-size: 11.5px; margin: 0 0 12px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .lg-free i { background: var(--z-free); } .lg-careful i { background: var(--z-careful); } .lg-protected i { background: var(--z-protected); }
+
+  .zone { border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 9px; padding: 10px; margin-bottom: 10px; background: var(--vscode-editor-background); }
+  .zone[data-level="free"]      { border-left-color: var(--z-free); }
+  .zone[data-level="careful"]   { border-left-color: var(--z-careful); }
+  .zone[data-level="protected"] { border-left-color: var(--z-protected); }
+  .zone .zhead { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .zone select { width: auto; padding: 5px 8px; font-size: 12px; }
+  .zbadge { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
+  .zbadge.lvl-free      { color: var(--z-free);      background: color-mix(in srgb, var(--z-free) 16%, transparent); }
+  .zbadge.lvl-careful   { color: var(--z-careful);   background: color-mix(in srgb, var(--z-careful) 16%, transparent); }
+  .zbadge.lvl-protected { color: var(--z-protected); background: color-mix(in srgb, var(--z-protected) 16%, transparent); }
+  .zone textarea { min-height: 64px; }
+  .x { margin-left: auto; }
+  .lvl-hint { font-size: 11px; color: var(--muted); }
+
+  .attach-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .att { display: flex; align-items: center; gap: 10px; padding: 8px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); font-size: 12px; }
+  .att .name { font-weight: 600; } .att .kind { color: var(--muted); } .att.ref { border-style: dashed; }
+  .decision { border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--border)); border-radius: 9px; padding: 12px; margin-bottom: 12px; background: color-mix(in srgb, var(--brand) 6%, transparent); }
+  .decision .q { font-size: 12.5px; margin-bottom: 10px; } .decision .q b { font-weight: 700; }
+
+  #result { display: none; margin-top: var(--gap); }
+  #result.show { display: block; }
+  .savings { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+  .savings .big { font-size: 26px; font-weight: 750; letter-spacing: -.02em; color: var(--ok); }
+  .savings .meta { font-size: 12px; color: var(--muted); } .savings .meta b { color: var(--fg); font-weight: 650; }
+  #outText { min-height: 120px; font-family: var(--vscode-editor-font-family, monospace); font-size: 12.5px; }
+  .result-actions { display: flex; gap: 10px; margin-top: 10px; }
+
+  .hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+  .offline-note { color: var(--warn); }
+  .spin { width: 13px; height: 13px; border: 2px solid var(--border); border-top-color: var(--brand); border-radius: 50%; display: inline-block; animation: sp .7s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  @media (max-width: 520px) { .tech-grid, .two { grid-template-columns: 1fr; } header { padding: 10px 12px; } main { padding: 14px; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="head">
-    <img id="logo" src="${logoUri}" alt="" />
-    <span class="mark" id="mark" style="display:none">L</span>
-    <div class="titles">
-      <span class="wordmark">Less Tokens</span>
-      <span class="for">for Cursor &amp; VS Code</span>
+
+<header>
+  <div class="brand"><span class="mark">⚡</span><span class="lt">less&#8202;<b>tokens</b></span></div>
+  <div class="spacer"></div>
+  <span class="pill off" id="healthPill" title="Local backend status"><span class="dot"></span><span id="healthText">checking…</span></span>
+  <span class="chip" id="acctChip" style="display:none"><span class="who" id="acctWho"></span><button class="linkbtn" id="logoutBtn">Sign out</button></span>
+</header>
+
+<main>
+  <!-- ── AUTH ──────────────────────────────────────────── -->
+  <section id="auth" class="show">
+    <div class="auth-wrap">
+      <div class="eyebrow">Account</div>
+      <h1 id="authTitle">Welcome back</h1>
+      <p class="sub" id="authSub">Sign in with your less-tokens account. Compression runs on your local backend.</p>
+
+      <div class="tabs" role="tablist">
+        <button role="tab" data-auth="login" aria-selected="true">Log in</button>
+        <button role="tab" data-auth="signup" aria-selected="false">Sign up</button>
+      </div>
+
+      <div class="msg err" id="authErr"></div>
+      <div class="msg ok"  id="authOk"></div>
+
+      <!-- login -->
+      <div id="loginForm">
+        <label class="field"><span class="lab">Email</span><input type="email" id="li_email" autocomplete="username" placeholder="you@example.com" /></label>
+        <label class="field"><span class="lab">Password</span><input type="password" id="li_password" autocomplete="current-password" placeholder="••••••••" /></label>
+        <button class="btn primary" id="loginBtn" style="width:100%">Sign in</button>
+      </div>
+
+      <!-- signup -->
+      <div id="signupForm" style="display:none">
+        <div class="two">
+          <label class="field"><span class="lab">First name</span><input type="text" id="su_first" placeholder="Ada" /></label>
+          <label class="field"><span class="lab">Last name</span><input type="text" id="su_last" placeholder="Lovelace" /></label>
+        </div>
+        <label class="field"><span class="lab">Email</span><input type="email" id="su_email" placeholder="you@example.com" /></label>
+        <label class="field"><span class="lab">Phone <span class="lvl-hint">(optional)</span></span><input type="tel" id="su_phone" placeholder="+1 555 0100" /></label>
+        <label class="field"><span class="lab">Password</span><input type="password" id="su_password" autocomplete="new-password" placeholder="Choose a password" /></label>
+        <button class="btn primary" id="signupBtn" style="width:100%">Create account</button>
+        <p class="hint">You'll get a confirmation email — confirm it, then log in.</p>
+      </div>
     </div>
-  </div>
-  <p class="sub">Compose a prompt, compress it, then insert it into chat. Code, tables, URLs &amp; math are preserved — only prose shrinks.</p>
+  </section>
 
-  <div>
-    <div class="mode" id="mode">
-      <button data-mode="normal" data-on="true">Normal</button>
-      <button data-mode="structured" data-on="false">Structured</button>
+  <!-- ── APP ───────────────────────────────────────────── -->
+  <section id="app">
+    <div class="msg err" id="appErr"></div>
+    <div id="offlineBanner" class="msg err" style="display:none">Local backend offline. Run <b>less-tokens-serve</b> in a terminal, then it'll connect automatically.</div>
+
+    <!-- TECHNIQUES — on top, always visible -->
+    <div class="card tech-card">
+      <div class="between" style="margin-bottom:12px">
+        <span class="eyebrow">Techniques</span>
+        <span class="lvl-hint" id="techCount"></span>
+      </div>
+      <div class="tech-grid" id="techGrid"></div>
     </div>
-    <p class="modehelp" id="modehelp">One prompt, compressed as a whole.</p>
-  </div>
 
-  <div id="normalBox">
-    <textarea id="prompt" placeholder="Type your prompt…"></textarea>
-  </div>
-
-  <div id="structuredBox" style="display:none">
-    <div class="legend">
-      <span><i class="dot free"></i>Free — full compression</span>
-      <span><i class="dot care"></i>Careful — safe only</span>
-      <span><i class="dot prot"></i>Protected — untouched</span>
+    <!-- MODE -->
+    <div class="tabs" role="tablist">
+      <button role="tab" data-mode="prompt" aria-selected="true">Prompt</button>
+      <button role="tab" data-mode="zones" aria-selected="false">Zones</button>
     </div>
-    <div class="zones" id="zones"></div>
-    <div class="addrow">
-      <span class="lab">Add zone</span>
-      <button id="addFree" data-level="free">+ Free</button>
-      <button id="addCareful" data-level="careful">+ Careful</button>
-      <button id="addProtected" data-level="protected">+ Protected</button>
+
+    <div id="modePrompt">
+      <label class="field"><span class="lab">Prompt</span><textarea id="prompt" placeholder="Write the prompt you'd send to Copilot / Cursor…"></textarea></label>
+      <label class="field"><span class="lab">Context / body <span class="lvl-hint">(optional — pasted docs, code, notes)</span></span><textarea id="body" placeholder="Longer context to include below the prompt…"></textarea></label>
+      <label class="tog" style="margin-bottom:14px"><input type="checkbox" id="compressFurther" /> Also compress the context/body</label>
     </div>
-  </div>
 
-  <div>
-    <div class="section-lab">Attach context</div>
-    <div id="attachArea">
-      <button class="btn" id="attachBtn">📎 Attach image / PDF / Word…</button>
+    <div id="modeZones" style="display:none">
+      <div class="between"><span class="eyebrow">Zones</span><button class="btn sm ghost" id="addZone">+ Add zone</button></div>
+      <div class="legend">
+        <span class="lg-free"><i></i><b style="color:var(--z-free)">free</b> — full compression</span>
+        <span class="lg-careful"><i></i><b style="color:var(--z-careful)">careful</b> — safe passes only</span>
+        <span class="lg-protected"><i></i><b style="color:var(--z-protected)">protected</b> — untouched</span>
+      </div>
+      <div id="zones"></div>
     </div>
-  </div>
 
-  <details>
-    <summary>Compression techniques</summary>
-    <div class="flags" id="flags"></div>
-  </details>
+    <div class="between"><span class="eyebrow">Attachments</span><button class="btn sm ghost" id="attachBtn">+ Attach file / image</button></div>
+    <div id="decision"></div>
+    <div class="attach-list" id="attachList"></div>
 
-  <div class="preview">
-    <div class="pvh"><span>Compressed preview</span><span id="stats" class="saved"></span></div>
-    <pre id="out"><span class="dim">Click “Compress” to preview.</span></pre>
-  </div>
+    <button class="btn primary" id="compressBtn" style="width:100%; padding:11px">Compress</button>
+    <div class="hint" id="compressHint"></div>
 
-  <div class="actions">
-    <button class="btn" id="compressBtn">Compress</button>
-    <button class="btn" id="copyBtn">Copy</button>
-    <span class="spacer"></span>
-    <button class="btn primary" id="insertBtn">Insert into chat ▸</button>
-  </div>
-  <p class="hint">Insert copies the result and prefills the chat input where supported — review, then send.</p>
-</div>
+    <div id="result" class="card">
+      <div class="savings">
+        <span class="big" id="savePct">—</span>
+        <span class="meta"><b id="tokBefore">0</b> → <b id="tokAfter">0</b> tokens <span id="charMeta"></span></span>
+      </div>
+      <textarea id="outText" readonly></textarea>
+      <div class="result-actions"><button class="btn" id="copyBtn">Copy</button><button class="btn primary" id="insertBtn">Insert into chat</button></div>
+    </div>
+  </section>
+</main>
 
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
-
-const FLAG_DEFS = [
-  ["remove_filler_phrases","filler phrases"],["apply_abbreviations","abbreviations"],
-  ["apply_contractions","contractions"],["remove_filler_words","filler words"],
-  ["remove_stopwords","stopwords"],["remove_function_words","function words"],
-  ["pos_keep_only","POS-keep"],["lemmatize","lemmatize"],["shorten_synonyms","synonyms"],
-  ["preserve_named_entities","protect names"],["normalize_whitespace_punct","normalize"],
-];
-const DEFAULT_FLAGS = {
-  remove_filler_phrases:true, apply_abbreviations:true, apply_contractions:true,
-  remove_filler_words:true, remove_stopwords:true, remove_function_words:false,
-  pos_keep_only:false, lemmatize:false, shorten_synonyms:false,
-  preserve_named_entities:true, normalize_whitespace_punct:true,
-};
-const PH = {
-  free:"Instruction body — compressed hard…",
-  careful:"Rules & constraints — meaning preserved…",
-  protected:'Output format — sent exactly, e.g. {"k":"v"}',
-};
-
-const state = {
-  mode:"normal", prompt:"", zones:[], flags:{...DEFAULT_FLAGS},
-  attachment:null, compressFurther:false, compressed:"", pendingInsert:false,
-};
 const $ = (id) => document.getElementById(id);
-const estTok = (s) => s ? Math.max(1, Math.round(s.length/4)) : 0;
-const uid = () => Math.random().toString(36).slice(2,8);
-const el = (tag, cls) => { const e=document.createElement(tag); if(cls) e.className=cls; return e; };
 
-// logo fallback
-(function(){
-  const lg=$("logo"), mk=$("mark");
-  const showMark=()=>{ lg.style.display="none"; mk.style.display="grid"; };
-  if(!lg.getAttribute("src")) showMark();
-  lg.addEventListener("error", showMark);
-})();
+const FLAG_LABELS = {
+  remove_filler_phrases: "Filler phrases",
+  apply_abbreviations: "Abbreviations",
+  apply_contractions: "Contractions",
+  remove_filler_words: "Filler words",
+  remove_stopwords: "Stopwords",
+  remove_function_words: "Function words",
+  pos_keep_only: "Content words only",
+  lemmatize: "Lemmatize",
+  shorten_synonyms: "Shorten synonyms",
+  preserve_named_entities: "Preserve names",
+  normalize_whitespace_punct: "Normalize spacing",
+};
+const FLAG_ORDER = Object.keys(FLAG_LABELS);
 
-// techniques
-function renderFlags(){
-  $("flags").innerHTML="";
-  for(const [key,name] of FLAG_DEFS){
-    const l=el("label","flag"); const cb=el("input"); cb.type="checkbox"; cb.checked=!!state.flags[key];
-    cb.addEventListener("change",()=>{ state.flags[key]=cb.checked; });
-    l.appendChild(cb); l.appendChild(document.createTextNode(name)); $("flags").appendChild(l);
+let state = {
+  mode: "prompt",
+  authTab: "login",
+  flags: {},
+  healthOk: false,
+  attachments: [],
+  zones: [{ text: "", level: "free" }],
+  lastOriginal: "",
+};
+const estTokens = (s) => Math.max(0, Math.round((s || "").length / 4));
+
+window.addEventListener("message", (e) => onMessage(e.data));
+vscode.postMessage({ type: "ready" });
+
+function onMessage(m) {
+  switch (m.type) {
+    case "session":     return applySession(m);
+    case "authError":   return showAuthErr(m.message);
+    case "signupOk":    return onSignupOk(m);
+    case "health":      return applyHealth(m.ok);
+    case "askKind":     return showDecision(m.category, m.filename);
+    case "prepping":    return showPrepping(m.filename);
+    case "attached":    return addAttachment(m.filename, m.kind, m.markdown, false);
+    case "attachedRef": return addAttachment(m.filename, m.kind, "", true);
+    case "result":      return showResult(m.compressed);
+    case "error":       return showAppErr(m.message);
   }
 }
 
-// mode
-$("mode").addEventListener("click",(e)=>{
-  const b=e.target.closest("button"); if(!b) return;
-  state.mode=b.dataset.mode;
-  [...$("mode").children].forEach(c=>c.dataset.on=String(c.dataset.mode===state.mode));
-  $("normalBox").style.display = state.mode==="normal" ? "" : "none";
-  $("structuredBox").style.display = state.mode==="structured" ? "" : "none";
-  $("modehelp").textContent = state.mode==="normal"
-    ? "One prompt, compressed as a whole."
-    : "Mix zones: free (squeezed), careful (safe), protected (verbatim).";
-});
-$("prompt").addEventListener("input",(e)=>{ state.prompt=e.target.value; });
-
-// zones
-function addZone(level){ state.zones.push({id:uid(), text:"", level}); renderZones(); }
-function removeZone(id){ state.zones=state.zones.filter(z=>z.id!==id); renderZones(); }
-function setLevel(id,level){ const z=state.zones.find(z=>z.id===id); if(z){ z.level=level; renderZones(); } }
-function moveZone(id,dir){
-  const i=state.zones.findIndex(z=>z.id===id), j=i+dir;
-  if(j<0||j>=state.zones.length) return;
-  const n=state.zones.slice(); [n[i],n[j]]=[n[j],n[i]]; state.zones=n; renderZones();
-}
-$("addFree").addEventListener("click",()=>addZone("free"));
-$("addCareful").addEventListener("click",()=>addZone("careful"));
-$("addProtected").addEventListener("click",()=>addZone("protected"));
-function renderZones(){
-  const root=$("zones"); root.innerHTML="";
-  state.zones.forEach((z,idx)=>{
-    const node=el("div","zone"); node.dataset.level=z.level;
-    const head=el("div","zhead");
-    const seg=el("div","seg");
-    ["free","careful","protected"].forEach(lk=>{
-      const b=el("button"); b.textContent=lk[0].toUpperCase()+lk.slice(1);
-      b.dataset.level=lk; b.dataset.on=String(z.level===lk);
-      b.addEventListener("click",()=>setLevel(z.id,lk)); seg.appendChild(b);
-    });
-    const tools=el("div","ztools");
-    const up=el("button"); up.textContent="↑"; up.disabled=idx===0; up.addEventListener("click",()=>moveZone(z.id,-1));
-    const dn=el("button"); dn.textContent="↓"; dn.disabled=idx===state.zones.length-1; dn.addEventListener("click",()=>moveZone(z.id,1));
-    const rm=el("button"); rm.textContent="✕"; rm.addEventListener("click",()=>removeZone(z.id));
-    tools.append(up,dn,rm); head.append(seg,tools);
-    const ta=el("textarea"); ta.value=z.text; ta.placeholder=PH[z.level];
-    ta.addEventListener("input",()=>{ z.text=ta.value; });
-    node.append(head,ta); root.appendChild(node);
-  });
-}
-
-// attach
-$("attachBtn").addEventListener("click",()=>vscode.postMessage({type:"pickFile"}));
-
-function renderAttachIdle(){
-  const a=$("attachArea"); a.innerHTML="";
-  const b=el("button","btn"); b.id="attachBtn2"; b.textContent="📎 Attach image / PDF / Word…";
-  b.addEventListener("click",()=>vscode.postMessage({type:"pickFile"}));
-  a.appendChild(b);
-}
-function renderAskKind(filename, category){
-  const a=$("attachArea"); a.innerHTML="";
-  const card=el("div","card");
-  const h=el("h4"); const p=el("p"); const opts=el("div","opts");
-  const yes=el("button","btn primary"); const no=el("button","btn");
-  if(category==="image"){
-    h.textContent="Does this image contain text you need?";
-    p.textContent="OCR pulls the text out and drops the picture — big token savings, but only the words survive. If the picture itself matters, attach it directly in chat instead.";
-    yes.textContent="Yes — it's mostly text → OCR";
-    no.textContent="No — the picture matters";
-    yes.addEventListener("click",()=>{ vscode.postMessage({type:"process", choice:"ocr"}); });
-    no.addEventListener("click",()=>{ vscode.postMessage({type:"process", choice:"full"}); });
+// ── session / auth ────────────────────────────────────
+function applySession(m) {
+  state.flags = Object.assign({}, m.flags || {});
+  if (m.user) {
+    $("auth").classList.remove("show");
+    $("app").classList.add("show");
+    $("acctChip").style.display = "";
+    $("acctWho").textContent = m.user.email || m.user.first_name || "Signed in";
+    renderTechniques();
+    renderZones();
   } else {
-    h.textContent="Do you only need the content?";
-    p.textContent="We'll extract just the text — no layout, fonts, page numbers or metadata. If formatting matters, attach the file directly in chat instead.";
-    yes.textContent="Only content → extract text";
-    no.textContent="Formatting matters";
-    yes.addEventListener("click",()=>{ vscode.postMessage({type:"process", choice:"content"}); });
-    no.addEventListener("click",()=>{ vscode.postMessage({type:"process", choice:"full"}); });
+    $("app").classList.remove("show");
+    $("auth").classList.add("show");
+    $("acctChip").style.display = "none";
+    $("li_password").value = "";
+    resetAuthButtons();
   }
-  const cancel=el("button","btn"); cancel.textContent="Cancel"; cancel.addEventListener("click",renderAttachIdle);
-  opts.append(yes,no,cancel); card.append(h,p,opts); a.appendChild(card);
-}
-function renderPrepping(filename){
-  const a=$("attachArea"); a.innerHTML="";
-  const c=el("div","chip dim"); c.textContent='extracting “'+filename+'”…'; a.appendChild(c);
-}
-function renderChip(){
-  const a=$("attachArea"); a.innerHTML="";
-  const at=state.attachment; if(!at){ renderAttachIdle(); return; }
-  const chip=el("div","chip");
-  const nm=el("span","nm"); nm.textContent=at.filename;
-  const kd=el("span","kd"); kd.textContent="· "+at.kind+(at.reference?"":" · ≈"+estTok(at.markdown)+"t");
-  chip.append(nm,kd);
-  if(!at.reference){
-    const cf=el("label","ck"); const cb=el("input"); cb.type="checkbox"; cb.checked=state.compressFurther;
-    cb.addEventListener("change",()=>{ state.compressFurther=cb.checked; });
-    cf.append(cb, document.createTextNode("compress further")); chip.appendChild(cf);
-  }
-  const x=el("span","x"); x.textContent="✕";
-  x.addEventListener("click",()=>{ state.attachment=null; state.compressFurther=false; renderAttachIdle(); refreshRefTip(); });
-  chip.appendChild(x);
-  a.appendChild(chip);
-  if(at.reference){
-    const tip=el("div","reftip");
-    tip.textContent="↳ Attach “"+at.filename+"” directly in your chat — it isn't part of the text prompt.";
-    a.appendChild(tip);
-  }
-}
-function refreshRefTip(){ /* tip is re-rendered with chip; nothing extra needed */ }
-
-// assembly (for before-count)
-function rawHead(){
-  if(state.mode==="structured") return state.zones.map(z=>z.text).filter(t=>t.trim()).join("\n\n");
-  return state.prompt;
-}
-function rawAll(){
-  const body = state.attachment && !state.attachment.reference ? state.attachment.markdown : "";
-  return [rawHead(), body].filter(x=>x&&x.trim()).join("\n\n");
 }
 
-// actions
-function doCompress(){
-  $("out").innerHTML='<span class="dim">Compressing…</span>'; $("stats").textContent="";
-  vscode.postMessage({type:"compress", payload:{
-    mode:state.mode, prompt:state.prompt, zones:state.zones, flags:state.flags,
-    body: state.attachment && !state.attachment.reference ? state.attachment.markdown : "",
-    compressFurther: state.compressFurther,
+document.querySelectorAll('[data-auth]').forEach((btn) => {
+  btn.onclick = () => {
+    state.authTab = btn.dataset.auth;
+    document.querySelectorAll('[data-auth]').forEach((b) => b.setAttribute("aria-selected", String(b === btn)));
+    const login = state.authTab === "login";
+    $("loginForm").style.display = login ? "" : "none";
+    $("signupForm").style.display = login ? "none" : "";
+    $("authTitle").textContent = login ? "Welcome back" : "Create your account";
+    $("authSub").textContent = login ? "Sign in with your less-tokens account. Compression runs on your local backend." : "Sign up on the less-tokens service. Compression still runs on your local backend.";
+    $("authErr").classList.remove("show");
+  };
+});
+
+$("loginBtn").onclick = () => {
+  $("authErr").classList.remove("show"); $("authOk").classList.remove("show");
+  $("loginBtn").disabled = true; $("loginBtn").textContent = "Signing in…";
+  vscode.postMessage({ type: "login", email: $("li_email").value.trim(), password: $("li_password").value });
+};
+$("li_password").addEventListener("keydown", (e) => { if (e.key === "Enter") $("loginBtn").click(); });
+
+$("signupBtn").onclick = () => {
+  $("authErr").classList.remove("show"); $("authOk").classList.remove("show");
+  $("signupBtn").disabled = true; $("signupBtn").textContent = "Creating…";
+  vscode.postMessage({ type: "signup", form: {
+    first_name: $("su_first").value.trim(),
+    last_name: $("su_last").value.trim(),
+    email: $("su_email").value.trim(),
+    phone: $("su_phone").value.trim(),
+    password: $("su_password").value,
   }});
+};
+$("logoutBtn").onclick = () => vscode.postMessage({ type: "logout" });
+
+function showAuthErr(msg) {
+  const el = $("authErr"); el.textContent = msg; el.classList.add("show");
+  resetAuthButtons();
 }
-$("compressBtn").addEventListener("click",doCompress);
-$("copyBtn").addEventListener("click",()=>vscode.postMessage({type:"copy", text: state.compressed || rawAll()}));
-$("insertBtn").addEventListener("click",()=>{
-  if(state.compressed){ vscode.postMessage({type:"insert", text:state.compressed}); }
-  else { state.pendingInsert=true; doCompress(); }
+function onSignupOk(m) {
+  resetAuthButtons();
+  document.querySelector('[data-auth="login"]').click();
+  const el = $("authOk"); el.textContent = m.message; el.classList.add("show");
+  if (m.email) $("li_email").value = m.email;
+}
+function resetAuthButtons() {
+  $("loginBtn").disabled = false; $("loginBtn").textContent = "Sign in";
+  $("signupBtn").disabled = false; $("signupBtn").textContent = "Create account";
+}
+
+// ── health ────────────────────────────────────────────
+function applyHealth(ok) {
+  state.healthOk = ok;
+  const pill = $("healthPill");
+  pill.className = "pill " + (ok ? "ok" : "off");
+  $("healthText").textContent = ok ? "Local backend on" : "Backend offline";
+  $("offlineBanner").style.display = ok ? "none" : "block";
+  $("compressBtn").disabled = !ok;
+  $("compressHint").innerHTML = ok ? "" : "<span class='offline-note'>Start <b>less-tokens-serve</b> to enable compression.</span>";
+}
+
+// ── techniques ────────────────────────────────────────
+function renderTechniques() {
+  const grid = $("techGrid"); grid.innerHTML = "";
+  FLAG_ORDER.forEach((key) => {
+    const lab = document.createElement("label");
+    lab.className = "tog";
+    lab.innerHTML = `<input type="checkbox" data-flag="${key}" ${state.flags[key] ? "checked" : ""}/> ${FLAG_LABELS[key]}`;
+    lab.querySelector("input").addEventListener("change", (e) => { state.flags[key] = e.target.checked; updateTechCount(); });
+    grid.appendChild(lab);
+  });
+  updateTechCount();
+}
+function updateTechCount() {
+  $("techCount").textContent = `${FLAG_ORDER.filter((k) => state.flags[k]).length} of ${FLAG_ORDER.length} on`;
+}
+function collectFlags() { const o = {}; FLAG_ORDER.forEach((k) => (o[k] = !!state.flags[k])); return o; }
+
+// ── mode tabs ─────────────────────────────────────────
+document.querySelectorAll('[data-mode]').forEach((btn) => {
+  btn.onclick = () => {
+    state.mode = btn.dataset.mode;
+    document.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute("aria-selected", String(b === btn)));
+    $("modePrompt").style.display = state.mode === "prompt" ? "" : "none";
+    $("modeZones").style.display = state.mode === "zones" ? "" : "none";
+  };
 });
 
-// host messages
-window.addEventListener("message",(e)=>{
-  const m=e.data;
-  if(m.type==="askKind"){ renderAskKind(m.filename, m.category); }
-  else if(m.type==="prepping"){ renderPrepping(m.filename); }
-  else if(m.type==="attached"){ state.attachment={filename:m.filename, kind:m.kind, markdown:m.markdown, reference:false}; renderChip(); }
-  else if(m.type==="attachedRef"){ state.attachment={filename:m.filename, kind:m.kind, markdown:"", reference:true}; renderChip(); }
-  else if(m.type==="result"){
-    state.compressed=m.compressed||"";
-    const before=estTok(rawAll()), after=estTok(state.compressed);
-    const pct=before>0?Math.round((1-after/before)*100):0;
-    $("out").textContent = state.compressed || "(empty)";
-    $("stats").textContent = "−"+pct+"%  ·  "+before+"→"+after+" tok (est)";
-    if(state.pendingInsert){ state.pendingInsert=false; vscode.postMessage({type:"insert", text:state.compressed}); }
-  } else if(m.type==="error"){
-    state.pendingInsert=false;
-    $("out").innerHTML='<span class="err">⚠ '+(m.message||"error")+'</span>'; $("stats").textContent="";
+// ── color-coded zones ─────────────────────────────────
+function renderZones() {
+  const wrap = $("zones"); wrap.innerHTML = "";
+  state.zones.forEach((z, i) => {
+    const el = document.createElement("div");
+    el.className = "zone";
+    el.dataset.level = z.level;
+    el.innerHTML = `
+      <div class="zhead">
+        <select data-i="${i}" class="zlevel">
+          <option value="free" ${z.level === "free" ? "selected" : ""}>free</option>
+          <option value="careful" ${z.level === "careful" ? "selected" : ""}>careful</option>
+          <option value="protected" ${z.level === "protected" ? "selected" : ""}>protected</option>
+        </select>
+        <span class="zbadge lvl-${z.level}">${z.level}</span>
+        <button class="btn sm ghost x" data-del="${i}" title="Remove zone">✕</button>
+      </div>
+      <textarea data-i="${i}" class="ztext" placeholder="Zone text…">${escapeHtml(z.text)}</textarea>`;
+    wrap.appendChild(el);
+  });
+  wrap.querySelectorAll(".zlevel").forEach((s) => s.addEventListener("change", (e) => {
+    const i = +e.target.dataset.i, lvl = e.target.value;
+    state.zones[i].level = lvl;
+    const zoneEl = e.target.closest(".zone");
+    zoneEl.dataset.level = lvl;
+    const badge = zoneEl.querySelector(".zbadge");
+    badge.textContent = lvl; badge.className = "zbadge lvl-" + lvl;
+  }));
+  wrap.querySelectorAll(".ztext").forEach((t) => t.addEventListener("input", (e) => { state.zones[+e.target.dataset.i].text = e.target.value; }));
+  wrap.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", (e) => {
+    state.zones.splice(+e.target.dataset.del, 1);
+    if (!state.zones.length) state.zones.push({ text: "", level: "free" });
+    renderZones();
+  }));
+}
+$("addZone").onclick = () => { state.zones.push({ text: "", level: "free" }); renderZones(); };
+
+// ── attachments ───────────────────────────────────────
+$("attachBtn").onclick = () => vscode.postMessage({ type: "pickFile" });
+function showDecision(category, filename) {
+  const isImg = category === "image";
+  $("decision").innerHTML = `
+    <div class="decision">
+      <div class="q">Attach <b>${escapeHtml(filename)}</b> — how should it be used?</div>
+      <div class="row">
+        <button class="btn primary sm" id="dExtract">${isImg ? "Extract text (OCR)" : "Extract text"}</button>
+        <button class="btn sm" id="dFull">Attach in chat (reference)</button>
+      </div>
+    </div>`;
+  $("dExtract").onclick = () => { $("decision").innerHTML = ""; vscode.postMessage({ type: "process", choice: "extract" }); };
+  $("dFull").onclick = () => { $("decision").innerHTML = ""; vscode.postMessage({ type: "process", choice: "full" }); };
+}
+function showPrepping(filename) {
+  $("decision").innerHTML = `<div class="att"><span class="spin"></span><span class="name">${escapeHtml(filename)}</span><span class="kind">reading…</span></div>`;
+}
+function addAttachment(name, kind, text, ref) {
+  $("decision").innerHTML = "";
+  state.attachments.push({ name, kind, text: text || "", ref: !!ref });
+  renderAttachments();
+}
+function renderAttachments() {
+  const list = $("attachList"); list.innerHTML = "";
+  state.attachments.forEach((a, i) => {
+    const el = document.createElement("div");
+    el.className = "att" + (a.ref ? " ref" : "");
+    el.innerHTML = `<span class="name">${escapeHtml(a.name)}</span><span class="kind">${escapeHtml(a.kind)}</span><button class="btn sm ghost x" data-rm="${i}" title="Remove">✕</button>`;
+    list.appendChild(el);
+  });
+  list.querySelectorAll("[data-rm]").forEach((b) => b.addEventListener("click", (e) => { state.attachments.splice(+e.target.dataset.rm, 1); renderAttachments(); }));
+}
+
+// ── compress ──────────────────────────────────────────
+function combinedBody() {
+  const extracted = state.attachments.filter((a) => !a.ref && a.text.trim()).map((a) => a.text);
+  const parts = [];
+  if (state.mode === "prompt" && $("body").value.trim()) parts.push($("body").value);
+  parts.push(...extracted);
+  return parts.join("\n\n");
+}
+$("compressBtn").onclick = () => {
+  if (!state.healthOk) return;
+  $("appErr").classList.remove("show");
+  const flags = collectFlags();
+  const body = combinedBody();
+  let payload, original;
+  if (state.mode === "zones") {
+    const zones = state.zones.filter((z) => z.text.trim());
+    payload = { mode: "structured", zones, body, compressFurther: true, flags };
+    original = zones.map((z) => z.text).join("\n\n") + (body ? "\n\n" + body : "");
+  } else {
+    const prompt = $("prompt").value;
+    payload = { mode: "simple", prompt, body, compressFurther: $("compressFurther").checked, flags };
+    original = prompt + (body ? "\n\n" + body : "");
   }
-});
+  if (!original.trim()) return showAppErr("Add a prompt or a zone first.");
+  state.lastOriginal = original;
+  $("compressBtn").disabled = true; $("compressBtn").textContent = "Compressing…";
+  vscode.postMessage({ type: "compress", payload });
+};
+function showResult(compressed) {
+  $("compressBtn").disabled = !state.healthOk; $("compressBtn").textContent = "Compress";
+  const before = estTokens(state.lastOriginal), after = estTokens(compressed);
+  const pct = before > 0 ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
+  $("savePct").textContent = pct + "% saved";
+  $("tokBefore").textContent = before; $("tokAfter").textContent = after;
+  $("charMeta").textContent = ` · ${state.lastOriginal.length} → ${compressed.length} chars`;
+  $("outText").value = compressed;
+  $("result").classList.add("show");
+  $("result").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+$("copyBtn").onclick = () => vscode.postMessage({ type: "copy", text: $("outText").value });
+$("insertBtn").onclick = () => vscode.postMessage({ type: "insert", text: $("outText").value });
 
-renderFlags(); renderZones();
+function showAppErr(msg) {
+  $("compressBtn").disabled = !state.healthOk; $("compressBtn").textContent = "Compress";
+  const el = $("appErr"); el.textContent = msg; el.classList.add("show");
+}
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
 </script>
 </body>
 </html>

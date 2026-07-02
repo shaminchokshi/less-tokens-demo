@@ -1,9 +1,11 @@
 // less-tokens VS Code / Cursor extension — Prompt Compressor
 // -----------------------------------------------------------------------------
-// A small composer webview: type a prompt (or build free/careful/protected
-// zones), pick techniques, attach an image / PDF / Word file (OCR or
-// reduce_document on the backend), compress, then insert the result into the
-// chat input (clipboard + best-effort prefill of the native chat).
+// Accounts (log in / sign up) run against the hosted backend (Railway).
+// Compression and file/image reduction run against your LOCAL backend
+// (less-tokens-serve, default http://localhost:8000). Sign in once, then every
+// prompt is compressed on your own machine.
+//
+// A live indicator shows whether the local backend is reachable.
 //
 // It can't reach inside Copilot/Cursor's own outbound requests — nothing can —
 // so "insert" means: copy the compressed prompt and prefill the chat box where
@@ -16,9 +18,16 @@ const path = require("path");
 const fs = require("fs");
 const { URL } = require("url");
 
+const DEFAULT_AUTH = "https://less-tokens-demo-production.up.railway.app";
+const TOKEN_KEY = "lessTokens.token";
+
+let ctx;
 let statusItem;
+let healthTimer = null;
+let lastHealthOk = null;
 
 function activate(context) {
+  ctx = context;
   context.subscriptions.push(
     vscode.commands.registerCommand("lessTokens.openComposer", () => ComposerPanel.show(context)),
     vscode.commands.registerCommand("lessTokens.compressSelection", compressSelection),
@@ -31,16 +40,102 @@ function activate(context) {
   statusItem.tooltip = "less-tokens: open the prompt compressor";
   if (vscode.workspace.getConfiguration("lessTokens").get("showStatusBar") !== false) statusItem.show();
   context.subscriptions.push(statusItem);
+
+  startHealthPolling();
 }
 
-function deactivate() {}
+function deactivate() {
+  if (healthTimer) clearInterval(healthTimer);
+}
 
 // ── config ───────────────────────────────────────────────────────────────────
+function authBase() {
+  return (vscode.workspace.getConfiguration("lessTokens").get("authUrl") || DEFAULT_AUTH).replace(/\/+$/, "");
+}
 function api() {
-  return (vscode.workspace.getConfiguration("lessTokens").get("apiUrl") || "https://less-tokens-demo-production.up.railway.app/").replace(/\/+$/, "");
+  return (vscode.workspace.getConfiguration("lessTokens").get("apiUrl") || "http://localhost:8000").replace(/\/+$/, "");
 }
 function cfgFlags() {
   return vscode.workspace.getConfiguration("lessTokens").get("flags") || {};
+}
+
+// ── auth (token in SecretStorage) ────────────────────────────────────────────
+const getToken = () => ctx.secrets.get(TOKEN_KEY);
+const setToken = (t) => ctx.secrets.store(TOKEN_KEY, t);
+const clearToken = () => ctx.secrets.delete(TOKEN_KEY);
+
+async function authHeader() {
+  const t = await getToken();
+  return t ? { Authorization: "Bearer " + t } : {};
+}
+
+async function fetchMe() {
+  if (!(await getToken())) return null;
+  try {
+    return await getJSON(authBase() + "/me", { auth: true, timeoutMs: 8000 });
+  } catch {
+    await clearToken();
+    return null;
+  }
+}
+
+async function doLogin(email, password) {
+  const data = await postJSON(authBase() + "/auth/login", { email, password }, { timeoutMs: 12000 });
+  if (!data || !data.token) throw new Error("Login failed — no token returned.");
+  await setToken(data.token);
+  return data.user;
+}
+
+async function doSignup(form) {
+  return postJSON(authBase() + "/auth/signup", form, { timeoutMs: 15000 });
+}
+
+async function requireAuth() {
+  const user = await fetchMe();
+  if (user) return user;
+  const pick = await vscode.window.showWarningMessage("less-tokens: sign in to compress.", "Open compressor");
+  if (pick === "Open compressor") ComposerPanel.show(ctx);
+  return null;
+}
+
+// ── local-backend health indicator ───────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const r = await getJSON(api() + "/health", { timeoutMs: 2500 });
+    return !!r && r.status === "ok";
+  } catch {
+    return false;
+  }
+}
+
+function applyHealthToStatusBar(ok) {
+  if (!statusItem) return;
+  if (ok) {
+    statusItem.text = "$(sparkle) compress";
+    statusItem.tooltip = "less-tokens: local backend running (" + api() + ")";
+    statusItem.backgroundColor = undefined;
+  } else {
+    statusItem.text = "$(warning) compress";
+    statusItem.tooltip = "less-tokens: local backend offline — run `less-tokens-serve` (" + api() + ")";
+    statusItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+  }
+}
+
+async function pollHealth() {
+  const ok = await checkHealth();
+  if (ok !== lastHealthOk) {
+    lastHealthOk = ok;
+    applyHealthToStatusBar(ok);
+  }
+  if (ComposerPanel.current) {
+    ComposerPanel.current.webview.postMessage({ type: "health", ok, url: api() });
+  }
+}
+
+function startHealthPolling() {
+  if (healthTimer) clearInterval(healthTimer);
+  pollHealth();
+  healthTimer = setInterval(pollHealth, 8000);
 }
 
 // ── composer webview ─────────────────────────────────────────────────────────
@@ -55,7 +150,11 @@ const ComposerPanel = {
       "lessTokensComposer",
       "Less Tokens for Cursor and VS Code",
       { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
-      { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [vscode.Uri.file(path.join(context.extensionPath, "media"))] }
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [vscode.Uri.file(path.join(context.extensionPath, "media"))],
+      }
     );
     this.current = panel;
     const logoFile = path.join(context.extensionPath, "media", "logo.png");
@@ -81,16 +180,75 @@ function getHtml(webview, context) {
 
 async function handleMessage(panel, msg) {
   try {
-    if (msg.type === "pickFile") return handlePickFile(panel);
-    if (msg.type === "process") return handleProcess(panel, msg.choice);
-    if (msg.type === "compress") return handleCompress(panel, msg.payload);
-    if (msg.type === "copy") {
-      await vscode.env.clipboard.writeText(msg.text || "");
-      return vscode.window.showInformationMessage("less-tokens: copied to clipboard.");
+    switch (msg.type) {
+      case "ready":    return sendSession(panel);
+      case "login":    return handleLogin(panel, msg.email, msg.password);
+      case "signup":   return handleSignup(panel, msg.form);
+      case "logout":   { await clearToken(); return sendSession(panel); }
+      case "pickFile": return handlePickFile(panel);
+      case "process":  return handleProcess(panel, msg.choice);
+      case "compress": return handleCompress(panel, msg.payload);
+      case "copy":
+        await vscode.env.clipboard.writeText(msg.text || "");
+        return vscode.window.showInformationMessage("less-tokens: copied to clipboard.");
+      case "insert":   return handleInsert(msg.text || "");
     }
-    if (msg.type === "insert") return handleInsert(msg.text || "");
   } catch (e) {
     panel.webview.postMessage({ type: "error", message: e.message });
+  }
+}
+
+async function sendSession(panel) {
+  const user = await fetchMe();
+  panel.webview.postMessage({
+    type: "session",
+    user: user || null,
+    flags: cfgFlags(),
+    localUrl: api(),
+    authUrl: authBase(),
+  });
+  const ok = await checkHealth();
+  lastHealthOk = ok;
+  applyHealthToStatusBar(ok);
+  panel.webview.postMessage({ type: "health", ok, url: api() });
+}
+
+async function handleLogin(panel, email, password) {
+  if (!email || !password) {
+    return panel.webview.postMessage({ type: "authError", message: "Enter your email and password." });
+  }
+  try {
+    const user = await doLogin(email, password);
+    panel.webview.postMessage({ type: "session", user, flags: cfgFlags(), localUrl: api(), authUrl: authBase() });
+    const ok = await checkHealth();
+    panel.webview.postMessage({ type: "health", ok, url: api() });
+  } catch (e) {
+    panel.webview.postMessage({ type: "authError", message: e.message });
+  }
+}
+
+async function handleSignup(panel, form) {
+  form = form || {};
+  if (!form.first_name || !form.last_name || !form.email || !form.password) {
+    return panel.webview.postMessage({ type: "authError", message: "First name, last name, email and password are required." });
+  }
+  try {
+    const r = await doSignup({
+      first_name: form.first_name,
+      last_name: form.last_name,
+      email: form.email,
+      phone: form.phone || null,
+      password: form.password,
+    });
+    panel.webview.postMessage({
+      type: "signupOk",
+      email: form.email,
+      message: r && r.email_sent
+        ? "Account created. Check your inbox to confirm your email, then sign in."
+        : "Account created, but the confirmation email didn't send. Try again shortly.",
+    });
+  } catch (e) {
+    panel.webview.postMessage({ type: "authError", message: e.message });
   }
 }
 
@@ -119,7 +277,6 @@ async function handlePickFile(panel) {
       pendingAttach = { category: "document", name, buf };
       panel.webview.postMessage({ type: "askKind", category: "document", filename: name });
     } else {
-      // plain text / code: nothing to decide — include as-is.
       panel.webview.postMessage({ type: "attached", filename: name, kind: "text", markdown: buf.toString("utf8") });
     }
   } catch (e) {
@@ -127,9 +284,6 @@ async function handlePickFile(panel) {
   }
 }
 
-// The user's answer from the decision card.
-//   image:    "ocr"     → extract text   | "full" → reference only (attach in chat)
-//   document: "content" → extract text   | "full" → reference only (attach in chat)
 async function handleProcess(panel, choice) {
   const p = pendingAttach;
   pendingAttach = null;
@@ -160,7 +314,7 @@ async function handleProcess(panel, choice) {
   }
 }
 
-// ── compression ──────────────────────────────────────────────────────────────
+// ── compression (local backend) ──────────────────────────────────────────────
 async function handleCompress(panel, p) {
   const flags = p.flags || {};
   let head = "";
@@ -199,7 +353,6 @@ async function handleInsert(text) {
   await vscode.env.clipboard.writeText(text);
   let prefilled = false;
   try {
-    // Native VS Code chat: prefill the input without auto-sending where supported.
     await vscode.commands.executeCommand("workbench.action.chat.open", { query: text, isPartialQuery: true });
     prefilled = true;
   } catch { /* not available (e.g. Cursor) — clipboard fallback */ }
@@ -218,6 +371,7 @@ async function smartCompress(text) {
   return out;
 }
 async function compressSelection() {
+  if (!(await requireAuth())) return;
   const ed = vscode.window.activeTextEditor;
   if (!ed || ed.selection.isEmpty) return vscode.window.showWarningMessage("less-tokens: select some text first.");
   try {
@@ -227,6 +381,7 @@ async function compressSelection() {
   } catch (e) { vscode.window.showErrorMessage("less-tokens: " + e.message); }
 }
 async function compressClipboard() {
+  if (!(await requireAuth())) return;
   try {
     const t = await vscode.env.clipboard.readText();
     if (!t.trim()) return vscode.window.showWarningMessage("less-tokens: clipboard is empty.");
@@ -236,10 +391,15 @@ async function compressClipboard() {
 }
 
 // ── HTTP helpers (no dependencies) ───────────────────────────────────────────
-function postJSON(urlStr, body) {
-  return request(urlStr, Buffer.from(JSON.stringify(body)), { "Content-Type": "application/json" });
+async function getJSON(urlStr, opts = {}) {
+  const headers = opts.auth ? await authHeader() : {};
+  return request("GET", urlStr, null, headers, opts);
 }
-function postMultipart(urlStr, fields, file) {
+async function postJSON(urlStr, body, opts = {}) {
+  const headers = Object.assign({ "Content-Type": "application/json" }, opts.auth ? await authHeader() : {});
+  return request("POST", urlStr, Buffer.from(JSON.stringify(body)), headers, opts);
+}
+function postMultipart(urlStr, fields, file, opts = {}) {
   const boundary = "----lessTokens" + Math.random().toString(16).slice(2);
   const parts = [];
   for (const [k, v] of Object.entries(fields || {})) {
@@ -248,20 +408,22 @@ function postMultipart(urlStr, fields, file) {
   parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.filename}"\r\nContent-Type: application/octet-stream\r\n\r\n`));
   parts.push(file.buffer);
   parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
-  return request(urlStr, Buffer.concat(parts), { "Content-Type": "multipart/form-data; boundary=" + boundary });
+  return request("POST", urlStr, Buffer.concat(parts), { "Content-Type": "multipart/form-data; boundary=" + boundary }, opts);
 }
-function request(urlStr, bodyBuf, headers) {
+function request(method, urlStr, bodyBuf, headers, opts = {}) {
   return new Promise((resolve, reject) => {
     let u;
-    try { u = new URL(urlStr); } catch { return reject(new Error("Invalid API URL: " + urlStr)); }
+    try { u = new URL(urlStr); } catch { return reject(new Error("Invalid URL: " + urlStr)); }
     const lib = u.protocol === "https:" ? https : http;
+    const h = Object.assign({}, headers);
+    if (bodyBuf) h["Content-Length"] = bodyBuf.length;
     const req = lib.request(
       {
         hostname: u.hostname,
         port: u.port || (u.protocol === "https:" ? 443 : 80),
         path: u.pathname + u.search,
-        method: "POST",
-        headers: Object.assign({ "Content-Length": bodyBuf.length }, headers),
+        method,
+        headers: h,
       },
       (res) => {
         let buf = "";
@@ -273,12 +435,16 @@ function request(urlStr, bodyBuf, headers) {
             try { detail = JSON.parse(buf).detail || buf; } catch { /* ignore */ }
             return reject(new Error("HTTP " + res.statusCode + ": " + detail));
           }
+          if (!buf) return resolve({});
           try { resolve(JSON.parse(buf)); } catch { reject(new Error("Backend returned invalid JSON.")); }
         });
       }
     );
-    req.on("error", (err) => reject(new Error(err.message + " — is the less-tokens backend running at " + api() + " ?")));
-    req.write(bodyBuf);
+    if (opts.timeoutMs) {
+      req.setTimeout(opts.timeoutMs, () => req.destroy(new Error("Request timed out — is the backend reachable?")));
+    }
+    req.on("error", (err) => reject(new Error(err.message)));
+    if (bodyBuf) req.write(bodyBuf);
     req.end();
   });
 }

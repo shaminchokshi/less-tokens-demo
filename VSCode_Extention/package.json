@@ -1,11 +1,12 @@
 {
   "name": "less-tokens",
-  "displayName": "Less Tokens for Cursor and VS Code",
+  "displayName": "Less Tokens for VS Code",
   "description": "A prompt compressor for Cursor / Copilot: compose, pick techniques, attach files (OCR / reduce), compress, and insert — fewer context tokens, same meaning.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "shaminchokshi",
   "license": "MIT",
   "icon": "media/logo.png",
+  "repository": { "type": "git", "url": "https://github.com/shaminchokshi/less-tokens.git" },
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -70,7 +71,7 @@
       "properties": {
         "lessTokens.apiUrl": {
           "type": "string",
-          "default": "https://less-tokens-demo-production.up.railway.app",
+          "default": "http://localhost:8000",
           "markdownDescription": "Base URL of your less-tokens FastAPI backend. Local: `http://localhost:8000`. Or your deployed URL, e.g. `https://less-tokens-demo-production.up.railway.app`."
         },
         "lessTokens.showStatusBar": {
