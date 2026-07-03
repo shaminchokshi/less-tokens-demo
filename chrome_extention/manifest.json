@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Less Tokens — Prompt Compressor for ChatGPT, Claude, Gemini",
+  "version": "0.1.0",
+  "description": "Compress AI prompts to save tokens & cost on ChatGPT, Claude, Gemini, Copilot, Perplexity & DeepSeek. Runs locally, private.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://less-tokens-demo-production.up.railway.app/*",
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "https://copilot.microsoft.com/*",
+    "https://m365.cloud.microsoft/*",
+    "https://www.bing.com/*",
+    "https://www.perplexity.ai/*",
+    "https://perplexity.ai/*",
+    "https://chat.deepseek.com/*",
+    "https://www.deepseek.com/*"
+  ],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": {
+    "default_title": "Less Tokens — Prompt Compressor",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://copilot.microsoft.com/*",
+        "https://m365.cloud.microsoft/*",
+        "https://www.bing.com/*",
+        "https://www.perplexity.ai/*",
+        "https://perplexity.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://www.deepseek.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

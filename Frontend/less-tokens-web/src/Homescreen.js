@@ -83,6 +83,9 @@ const ACCOUNT_CSS = `
 .acct-status.off .sdot{background:#b9bdd0}
 .acct-gate{color:var(--muted);font-size:13.5px;line-height:1.6;text-align:center;padding:10px 0}
 .acct-spin{animation:acct-spin 1s linear infinite}@keyframes acct-spin{to{transform:rotate(360deg)}}
+.acct-terms{color:var(--muted);font-size:11.5px;line-height:1.5;text-align:center;margin:10px 0 0}
+.acct-terms a{color:var(--violet);font-weight:600;text-decoration:underline;cursor:pointer}
+.acct-terms a:hover{opacity:.8}
 
 /* thin extension card — sits beside the sign-up */
 .ext-thin{width:190px;max-width:100%;padding:16px;text-align:left}
@@ -138,7 +141,7 @@ function Msg({ kind, children }) {
   );
 }
 
-export default function HomeScreen({ onLaunch }) {
+export default function HomeScreen({ onLaunch, onPrivacy }) {
   const [copied, setCopied] = useState(false);
 
   // --- account + subscription state ---
@@ -164,6 +167,10 @@ export default function HomeScreen({ onLaunch }) {
 
   function goAccount() {
     document.getElementById("account")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function openPrivacy(e) {
+    if (onPrivacy) { e.preventDefault(); onPrivacy(); }
   }
 
   // On load: live price, ?token= verification, restore session.
@@ -340,6 +347,10 @@ export default function HomeScreen({ onLaunch }) {
                           <button className="btn btn-grad acct-btn" disabled={busy} onClick={onSignup}>
                             {busy ? <Loader2 size={17} className="acct-spin" /> : <Sparkles size={17} />} Create account
                           </button>
+                          <p className="acct-terms">
+                            By signing up you agree to our{" "}
+                            <a href="/privacy" onClick={openPrivacy}>Privacy Policy</a>.
+                          </p>
                         </>
                       )}
 
@@ -350,6 +361,10 @@ export default function HomeScreen({ onLaunch }) {
                           <button className="btn btn-grad acct-btn" disabled={busy} onClick={onLogin}>
                             {busy ? <Loader2 size={17} className="acct-spin" /> : <Check size={17} />} Sign in
                           </button>
+                          <p className="acct-terms">
+                            By continuing you agree to our{" "}
+                            <a href="/privacy" onClick={openPrivacy}>Privacy Policy</a>.
+                          </p>
                         </>
                       )}
                     </>

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  body { width: 280px; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; color: #1c2030; }
+  header { display: flex; align-items: center; gap: 2px; padding: 12px 14px; border-bottom: 1px solid #ececf2; font-weight: 800; font-size: 16px; letter-spacing: -.03em; }
+  header .w1 { color: #15152e; } header .w2 { color: #7c6cff; }
+  main { padding: 14px; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid #e6e7ee; color: #8a8ea0; margin-bottom: 12px; }
+  .pill .d { width: 8px; height: 8px; border-radius: 50%; background: #b9bdd0; }
+  .pill.ok { color: #1a9d63; border-color: #bfe6d2; } .pill.ok .d { background: #1a9d63; }
+  .pill.off { color: #e5a13a; border-color: #f0dcb8; } .pill.off .d { background: #e5a13a; }
+  label { display: block; font-size: 12px; font-weight: 600; margin: 10px 0 5px; }
+  input { width: 100%; border: 1px solid #dfe0ea; border-radius: 8px; padding: 8px 10px; font: inherit; outline: none; }
+  input:focus { border-color: #7c6cff; }
+  .btn { width: 100%; margin-top: 12px; border: none; color: #fff; background: linear-gradient(135deg,#7c6cff,#4aa3ff); padding: 9px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+  .btn.ghost { background: #f4f4f8; color: #1c2030; border: 1px solid #e6e7ee; margin-top: 8px; }
+  p.note { color: #8a8ea0; font-size: 11.5px; line-height: 1.5; margin: 12px 0 0; }
+  code { background: #f1f1f6; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <header><span class="w1">less</span><span class="w2">tokens</span></header>
+  <main>
+    <span class="pill off" id="pill"><span class="d"></span><span id="pillt">checking…</span></span>
+
+    <label>Local backend URL</label>
+    <input id="apiUrl" type="text" placeholder="http://localhost:8000" />
+    <button class="btn" id="save">Save</button>
+    <button class="btn ghost" id="open">Open on this page</button>
+
+    <p class="note">
+      Start the backend with <code>less-tokens-serve</code>. Then open the panel from the
+      <b>less<span style="color:#7c6cff">tokens</span></b> button next to the chat box on ChatGPT, Claude, Gemini, Perplexity, DeepSeek, or Copilot.
+    </p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
