@@ -16,7 +16,7 @@ function Github({ size = 18 }) {
 
 /* Update these two before publishing. */
 const EFFECTIVE_DATE = "July 3, 2026";
-const CONTACT_EMAIL = "privacy@lesstokens.org";
+const CONTACT_EMAIL = "shaminchokshi2000@gmail.com";
 
 /* Scoped styles — reuse the same tokens as shared.js / ACCOUNT_CSS. */
 const PRIVACY_CSS = `
