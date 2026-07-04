@@ -243,13 +243,17 @@
     const extracted = state.attachments.filter((a) => a.text.trim()).map((a) => a.text);
     let payload, original;
     if (state.mode === "zones") {
-      const zones = state.zones.filter((z) => z.text.trim());
+      // Read zone values straight from the DOM so they can't be stale.
+      const zoneEls = root.querySelectorAll("#lt-zones .zone");
+      const zones = [...zoneEls]
+        .map((el) => ({ text: el.querySelector(".ztext").value, level: el.querySelector(".zlvl").value }))
+        .filter((z) => z.text.trim());
       const body = extracted.join("\n\n");
       payload = { mode: "structured", zones, body, compressFurther: true, flags };
       original = zones.map((z) => z.text).join("\n\n") + (body ? "\n\n" + body : "");
     } else {
-      const prompt = val("lt-prompt");
-      const body = [val("lt-body"), ...extracted].filter(Boolean).join("\n\n");
+      const prompt = $("lt-prompt").value;
+      const body = [$("lt-body").value, ...extracted].filter((x) => x && x.trim()).join("\n\n");
       payload = { mode: "simple", prompt, body, compressFurther: $("lt-further").checked, flags };
       original = prompt + (body ? "\n\n" + body : "");
     }
@@ -274,7 +278,18 @@
       writeInput(inputEl, out);
     }, 60);
   };
-  $("lt-addzone").onclick = () => { state.zones.push({ text: "", level: "free" }); renderZones(); };
+  // Pull current zone text/level out of the DOM into state (call before any
+  // re-render, so typed-but-unsynced text is never lost).
+  function syncZonesFromDom() {
+    const els = root.querySelectorAll("#lt-zones .zone");
+    if (!els.length) return;
+    state.zones = [...els].map((el) => ({
+      text: el.querySelector(".ztext").value,
+      level: el.querySelector(".zlvl").value,
+    }));
+  }
+
+  $("lt-addzone").onclick = () => { syncZonesFromDom(); state.zones.push({ text: "", level: "free" }); renderZones(); };
 
   function prefillFromInput(force) {
     const el = findInput();
@@ -344,7 +359,7 @@
         <textarea class="ztext" placeholder="Zone text…">${esc(z.text)}</textarea>`;
       el.querySelector(".zlvl").onchange = (e) => { z.level = e.target.value; el.dataset.level = z.level; const b = el.querySelector(".zbadge"); b.textContent = z.level; b.className = "zbadge lvl-" + z.level; };
       el.querySelector(".ztext").oninput = (e) => (z.text = e.target.value);
-      el.querySelector(".x").onclick = () => { state.zones.splice(i, 1); if (!state.zones.length) state.zones.push({ text: "", level: "free" }); renderZones(); };
+      el.querySelector(".x").onclick = () => { syncZonesFromDom(); state.zones.splice(i, 1); if (!state.zones.length) state.zones.push({ text: "", level: "free" }); renderZones(); };
       w.appendChild(el);
     });
   }
@@ -433,8 +448,8 @@
   .card{border:1px solid #ececf2;border-radius:10px;padding:12px;margin-bottom:12px;}
   .between{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
   .eyebrow{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#8a8ea0;font-weight:700;}
-  .tech-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;}
-  .tog{display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;}
+  .tech-grid{display:flex;flex-wrap:wrap;gap:6px 14px;}
+  .tog{display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap;}
   .tog input{width:14px;height:14px;accent-color:#7c6cff;}
   .legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;margin:0 0 10px;color:#8a8ea0;}
   .legend b{font-weight:700;}
