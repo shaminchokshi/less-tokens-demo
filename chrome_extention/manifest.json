@@ -3,7 +3,7 @@
   "name": "Less Tokens — Prompt Compressor for ChatGPT, Claude, Gemini",
   "version": "0.1.0",
   "description": "Compress AI prompts to save tokens & cost on ChatGPT, Claude, Gemini, Copilot, Perplexity & DeepSeek. Runs locally, private.",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "http://localhost/*",
     "http://127.0.0.1/*",
