@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Less Tokens — Prompt Compressor for ChatGPT, Claude, Gemini",
+  "name": "Less Tokens — Prompt Compressor for ChatGPT, Claude, Gemini, Copilot",
   "version": "0.1.0",
-  "description": "Compress AI prompts to save tokens & cost on ChatGPT, Claude, Gemini, Copilot, Perplexity & DeepSeek. Runs locally, private.",
+  "description": "Compress AI prompts to save tokens & cost on all known LLMs and AI Apps. Runs locally, private.",
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "http://localhost/*",
