@@ -36,6 +36,81 @@ function CursorMark({ size = 16 }) {
   );
 }
 
+/* ── Extension card: rotating compatibility marks + Chrome mark ─────────────── */
+function OpenAIMark({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#000" aria-hidden="true">
+      <path d="M22.28 9.82a5.99 5.99 0 0 0-.52-4.91 6.05 6.05 0 0 0-6.51-2.9A6.06 6.06 0 0 0 4.98 3.8a5.99 5.99 0 0 0-4 2.9 6.05 6.05 0 0 0 .74 7.1 5.98 5.98 0 0 0 .51 4.91 6.05 6.05 0 0 0 6.52 2.9A5.98 5.98 0 0 0 13.26 24a6.06 6.06 0 0 0 5.77-4.21 5.99 5.99 0 0 0 4-2.9 6.06 6.06 0 0 0-.75-7.07Zm-9.02 12.6a4.48 4.48 0 0 1-2.88-1.04l.14-.08 4.78-2.76a.79.79 0 0 0 .39-.68v-6.74l2.02 1.17a.07.07 0 0 1 .04.06v5.58a4.5 4.5 0 0 1-4.49 4.49ZM3.6 18.3a4.47 4.47 0 0 1-.53-3l.14.09 4.78 2.76a.77.77 0 0 0 .78 0l5.84-3.37v2.33a.08.08 0 0 1-.03.06L9.75 19.96a4.5 4.5 0 0 1-6.14-1.64ZM2.34 7.9a4.48 4.48 0 0 1 2.35-1.97V11.6a.77.77 0 0 0 .38.67l5.81 3.35-2.02 1.17a.07.07 0 0 1-.07 0L3.96 14a4.5 4.5 0 0 1-1.62-6.1Zm16.6 3.86-5.83-3.4L15.13 7.2a.07.07 0 0 1 .07 0l4.83 2.79a4.49 4.49 0 0 1-.68 8.1v-5.66a.79.79 0 0 0-.4-.67Zm2.01-3.02-.14-.09-4.77-2.78a.78.78 0 0 0-.79 0L9.42 9.24V6.91a.07.07 0 0 1 .03-.06l4.83-2.79a4.49 4.49 0 0 1 6.67 4.65ZM8.32 12.86 6.3 11.7a.08.08 0 0 1-.04-.06V6.07a4.49 4.49 0 0 1 7.37-3.45l-.14.08L8.7 5.46a.79.79 0 0 0-.39.68v6.72Zm1.1-2.36 2.6-1.5 2.6 1.5v3l-2.6 1.5-2.6-1.5v-3Z" />
+    </svg>
+  );
+}
+function ClaudeMark({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#D97757" aria-hidden="true">
+      <path d="M6.9 15.5 11.3 13l.08-.22-.08-.12h-.22l-.75-.05-2.56-.07-2.22-.09-2.15-.12-.54-.11L2.3 11.6l.05-.33.45-.3.65.05 1.43.1 2.14.15 1.56.09 2.3.24h.37l.05-.15-.13-.09-.1-.1-2.29-1.55-2.48-1.64-1.3-.94-.7-.48-.35-.45-.15-.97.63-.7.85.06.22.06.86.66 1.84 1.42 2.4 1.77.35.3.14-.1.02-.07-.16-.27L9.5 5.48 8.1 3.07l-.62-1-.17-.6a2.4 2.4 0 0 1-.08-.7L7.94.06l.4.13 1.65 2.26 1.28 1.76.75 1.03.11-.08.05-.32.3-1.6.28-1.97L12.96.6l.14-.35.7.05.37.5-.05.33-.22 1.43-.43 2.24-.28 1.5h.16l.19-.18.75-1 1.26-1.58.56-.63.65-.7.42-.32h.79l.58.86-.26.89-.81 1.03-.68.88-.97 1.3-.6 1.05.05.08.14-.01 2.16-.46 1.17-.21 1.4-.24.63.3.07.3-.25.61-1.49.37-1.75.35-2.6.62-.03.02.04.05 1.17.11.5.03h1.23l2.29.17.6.4.36.48-.06.37-.92.47-1.25-.3-2.9-.68-1-.25h-.14v.09l.83.81 1.53 1.38 1.91 1.78.1.44-.25.35-.26-.04-1.69-1.27-.65-.57-1.48-1.24h-.1v.13l.34.5 1.8 2.71.1.83-.14.27-.46.16-.5-.09-1.03-1.45-1.06-1.63-.86-1.46-.1.06-.51 5.5-.24.28-.55.21-.46-.35-.24-.56.24-1.12.3-1.47.24-1.16.21-1.45.13-.48-.01-.03-.11.01-1.1 1.5-1.67 2.26-1.32 1.42-.32.12-.55-.28.05-.5.3-.46 1.84-2.34.99-1.3.64-.74-.01-.11h-.04L6.3 15.9l-1.14.14-.49-.46.06-.3.23-.25 1.94-1.33Z" />
+    </svg>
+  );
+}
+function GeminiMark({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <defs>
+        <linearGradient id="ltGemGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#4285F4" />
+          <stop offset="0.5" stopColor="#9B72CB" />
+          <stop offset="1" stopColor="#D96570" />
+        </linearGradient>
+      </defs>
+      <path d="M12 1c.5 5.6 5.4 10.5 11 11-5.6.5-10.5 5.4-11 11-.5-5.6-5.4-10.5-11-11C6.6 11.5 11.5 6.6 12 1Z" fill="url(#ltGemGrad)" />
+    </svg>
+  );
+}
+function CopilotMark({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M2 2h9.2v9.2H2V2Z" fill="#F25022" />
+      <path d="M12.8 2H22v9.2h-9.2V2Z" fill="#7FBA00" />
+      <path d="M2 12.8h9.2V22H2v-9.2Z" fill="#00A4EF" />
+      <path d="M12.8 12.8H22V22h-9.2v-9.2Z" fill="#FFB900" />
+    </svg>
+  );
+}
+function ChromeMark({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="4.2" fill="#fff" />
+      <path d="M12 2a10 10 0 0 1 8.66 5H12a5 5 0 0 0-4.6 3.05L3.6 4.9A9.98 9.98 0 0 1 12 2Z" fill="#EA4335" />
+      <path d="M3.6 4.9 7.4 10.1A5 5 0 0 0 12 17h.3l-3.6 4.6A10 10 0 0 1 3.6 4.9Z" fill="#34A853" />
+      <path d="M20.66 7A10 10 0 0 1 8.7 21.6L12.3 17a5 5 0 0 0 4.3-7.9l.02-.05h4.04Z" fill="#4285F4" />
+      <path d="M12 7h8.66a10 10 0 0 1 .3 2h-4.36A5 5 0 0 0 12 7Z" fill="#FBBC05" />
+    </svg>
+  );
+}
+
+/* The hosts the extension works on — cycles every 3 seconds. */
+const EXT_TARGETS = [
+  { name: "ChatGPT", Mark: OpenAIMark },
+  { name: "Claude", Mark: ClaudeMark },
+  { name: "Gemini", Mark: GeminiMark },
+  { name: "Microsoft Copilot", Mark: CopilotMark },
+  { name: "VS Code", Mark: VSCodeMark },
+];
+
+function RotatingMark({ size = 64 }) {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setI((n) => (n + 1) % EXT_TARGETS.length), 3000);
+    return () => clearInterval(id);
+  }, []);
+  const { name, Mark } = EXT_TARGETS[i];
+  return (
+    <div key={i} className="lt-osc">
+      <Mark size={size} />
+      <span className="lt-osc-name">{name}</span>
+    </div>
+  );
+}
+
 /* Scoped styles: hero split + account/subscription. Same tokens as shared.js CSS. */
 const ACCOUNT_CSS = `
 .hero-split{padding:54px 0 34px}
@@ -110,6 +185,11 @@ const ACCOUNT_CSS = `
 .ext-cancel{width:100%;display:inline-flex;align-items:center;justify-content:center;gap:6px;color:#c0392b;border:1px solid #f0c8c8;background:#fff;border-radius:10px;padding:9px;font-weight:600;font-size:12.5px;transition:.15s}
 .ext-cancel:hover{background:#fdf2f2}
 .ext-mini{color:var(--muted);font-size:11px;text-align:center;margin-top:8px;font-family:'JetBrains Mono'}
+
+/* oscillating compatibility mark inside the extension card */
+@keyframes lt-osc{0%{opacity:0;transform:scale(.9)}12%{opacity:1;transform:scale(1)}88%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.9)}}
+.lt-osc{display:grid;place-items:center;width:100%;animation:lt-osc 3s ease-in-out both}
+.lt-osc-name{font-size:11.5px;font-weight:600;color:var(--muted);margin-top:7px;white-space:nowrap}
 
 .nav-user{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink-soft)}
 .nav-user b{font-weight:600;color:var(--ink)}
@@ -370,15 +450,15 @@ export default function HomeScreen({ onLaunch, onPrivacy }) {
                     </>
                   )}
                 </div>
-                 
+
                 {/* thin extension */}
                 <div className="card acct ext-thin">
                   <div className="ext-ic"><Zap size={18} /></div>
                   <h3 className="ext-title">Extension</h3>
-                  <p className="ext-tag">VS Code</p>
+                  <p className="ext-tag">VS Code &amp; Chrome</p>
 
                   <div className="ext-logos" style={{ justifyContent: "center", padding: "6px 0 12px" }}>
-                    <VSCodeMark size={64} />
+                    <RotatingMark size={64} />
                   </div>
 
                   <ul className="ext-feat">
@@ -392,6 +472,14 @@ export default function HomeScreen({ onLaunch, onPrivacy }) {
                     onClick={() => window.open("https://marketplace.visualstudio.com/items?itemName=shaminchokshi.less-tokens", "_blank", "noopener,noreferrer")}
                   >
                     <VSCodeMark size={15} /> Get it on VS Code
+                  </button>
+
+                  <button
+                    className="btn btn-grad ext-btn"
+                    style={{ marginTop: 8 }}
+                    onClick={() => window.open("https://chromewebstore.google.com/detail/less-tokens-%E2%80%94-prompt-comp/lmibajfpiknhhiddnecfkjiajndggfbe?hl=en-US&utm_source=ext_sidebar", "_blank", "noopener,noreferrer")}
+                  >
+                    <ChromeMark size={15} /> Get it on Chrome
                   </button>
                 </div>
 
