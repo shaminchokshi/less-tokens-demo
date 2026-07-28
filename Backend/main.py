@@ -30,6 +30,8 @@ Run it
 Hit GET /warmup once after boot if you skipped the automatic startup warm.
 """
 import asyncio
+import base64
+import io
 import logging
 import math
 import os
@@ -50,9 +52,10 @@ from less_tokens import compress, reduce_document, smart_compress
 # reduce_image_ocr() is newer than the rest. Import it defensively so the API
 # still boots on an older build — only /reduce_image is disabled in that case.
 try:
-    from less_tokens import reduce_image_ocr
+    from less_tokens import reduce_image_ocr, reduce_image_resize
 except ImportError:  # pragma: no cover
     reduce_image_ocr = None
+    reduce_image_resize = None
 
 # compress_structured() is also newer. Same defensive treatment — only
 # /compress_structured is disabled if the installed build is missing it.
@@ -515,4 +518,105 @@ async def do_reduce_image(file: UploadFile = File(...)):
         "markdown": markdown,
         "markdown_tokens": _ntok(markdown),
         "markdown_chars": len(markdown),
+    }
+
+# Formats we hand back. PNG keeps transparency; JPEG is smaller for photos.
+_RESIZE_PNG_MODES = {"RGBA", "LA", "P"}
+
+
+def _resize_image_bytes(data: bytes, long_edge: int) -> dict:
+    """Shrink an image and re-encode it. Runs in a threadpool (Pillow is blocking).
+
+    Returns the encoded bytes plus before/after dimensions so the caller can show
+    the user exactly what the resize bought them."""
+    from PIL import Image  # ships with less-tokens; imported here to keep startup lean
+
+    original = Image.open(io.BytesIO(data))
+    original.load()
+    ow, oh = original.size
+
+    resized = reduce_image_resize(io.BytesIO(data), long_edge=long_edge)
+
+    fmt = "PNG" if resized.mode in _RESIZE_PNG_MODES else "JPEG"
+    if fmt == "JPEG" and resized.mode != "RGB":
+        resized = resized.convert("RGB")
+
+    buf = io.BytesIO()
+    save_kwargs = {"optimize": True}
+    if fmt == "JPEG":
+        save_kwargs["quality"] = 85
+    resized.save(buf, format=fmt, **save_kwargs)
+    out = buf.getvalue()
+
+    return {
+        "bytes": out,
+        "mime": "image/png" if fmt == "PNG" else "image/jpeg",
+        "original_width": ow,
+        "original_height": oh,
+        "width": resized.size[0],
+        "height": resized.size[1],
+    }
+
+
+@app.post("/reduce_image_resize")
+async def do_reduce_image_resize(
+    file: UploadFile = File(...),
+    long_edge: int = Form(512),
+):
+    """Shrink an image so its long edge is at most `long_edge` pixels, preserving
+    aspect ratio, and return it as a base64 data URL.
+
+    Use this when the *picture itself* is what the model needs to look at — a
+    diagram, a chart, a UI screenshot — but you don't want to pay image tokens for
+    pixels the model never reads. At 512px on the long edge the major providers all
+    sit at their minimum image-token floor. Images already within the limit come
+    back unchanged (same pixels, possibly re-encoded).
+
+    If the text is all you want, use /reduce_image instead — OCR is far cheaper."""
+    if reduce_image_resize is None:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "reduce_image_resize() is not available in the installed less-tokens "
+                "build. It arrived in 0.7.0 — run `pip install -U 'less-tokens>=0.7.0'` "
+                "and restart the server. Until then, use 'Send the image as is'."
+            ),
+        )
+    if not 64 <= long_edge <= 4096:
+        raise HTTPException(
+            status_code=422,
+            detail="long_edge must be between 64 and 4096 pixels.",
+        )
+
+    filename = file.filename or "upload"
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail=f"'{filename}' is empty.")
+
+    try:
+        r = await run_in_threadpool(_resize_image_bytes, data, long_edge)
+    except Exception as exc:  # surface a clean error to the browser
+        raise HTTPException(
+            status_code=422, detail=f"Could not resize '{filename}': {exc}"
+        )
+
+    out = r["bytes"]
+    b64 = base64.b64encode(out).decode("ascii")
+    px_before = r["original_width"] * r["original_height"]
+    px_after = r["width"] * r["height"]
+
+    return {
+        "filename": filename,
+        "data_url": f"data:{r['mime']};base64,{b64}",
+        "mime": r["mime"],
+        "long_edge": long_edge,
+        "original_width": r["original_width"],
+        "original_height": r["original_height"],
+        "width": r["width"],
+        "height": r["height"],
+        "original_bytes": len(data),
+        "bytes": len(out),
+        "pixel_reduction_pct": round((1 - px_after / px_before) * 100, 2) if px_before else 0.0,
+        "byte_reduction_pct": round((1 - len(out) / len(data)) * 100, 2) if data else 0.0,
+        "unchanged": px_after == px_before,
     }

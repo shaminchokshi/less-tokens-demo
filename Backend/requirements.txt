@@ -1,7 +1,7 @@
 fastapi>=0.110
 uvicorn[standard]>=0.27
 python-multipart>=0.0.9
-less-tokens==0.6.5
+less-tokens==0.7.1
 
 # --- added for accounts, subscription & email verification (MySQL) ---
 asyncmy>=0.2.9
