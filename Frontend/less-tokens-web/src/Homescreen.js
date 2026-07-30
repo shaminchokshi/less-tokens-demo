@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import {
   ArrowRight, Package, Copy, Check, FileText, GaugeCircle,
   Scissors, Zap, Lightbulb, MessageSquare,
+  Braces, ScanLine, Image as ImageIcon, Wand2,
   User, Mail, Lock, Phone, LogOut, X, Loader2, AlertCircle, Sparkles,
 } from "lucide-react";
 import { REPO, PYPI, ISSUES, BAR_W } from "./shared.js";
@@ -117,7 +118,10 @@ const ACCOUNT_CSS = `
 .hero-grid{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:38px;align-items:start;text-align:left}
 @media(max-width:1040px){.hero-grid{grid-template-columns:1fr;text-align:center;gap:30px;justify-items:center}}
 .hero-grid .wordmark{font-size:clamp(46px,7.2vw,88px)}
-.hero-grid .lede{margin:18px 0 0;max-width:540px;font-size:16px}
+.hero-grid .lede{margin:18px 0 0;max-width:min(760px,100%);font-size:17px}
+.hero-grid .lede-2{margin-top:12px;font-size:15.5px}
+.hero-grid .lede code{font-family:'JetBrains Mono',monospace;font-size:.86em;background:var(--soft);
+  border:1px solid var(--line);border-radius:6px;padding:2px 6px;white-space:nowrap}
 .hero-grid .cta-row{justify-content:flex-start;margin-top:26px}
 .hero-grid .bars{margin:28px 0 0;justify-content:flex-start}
 @media(max-width:1040px){
@@ -193,6 +197,28 @@ const ACCOUNT_CSS = `
 
 .nav-user{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink-soft)}
 .nav-user b{font-weight:600;color:var(--ink)}
+
+/* seven function cards instead of three — let them flow */
+.feats{display:grid !important;grid-template-columns:repeat(auto-fit,minmax(260px,1fr)) !important;gap:16px}
+.feats .feat h4{display:flex;align-items:center;gap:0}
+.feats .feat h4 code{word-break:break-word}
+
+/* full-width page: overrides the narrow .wrap from shared.js */
+.wrap{max-width:1680px !important;width:100% !important;
+  padding-left:clamp(20px,3vw,56px) !important;padding-right:clamp(20px,3vw,56px) !important}
+.hero-grid{gap:clamp(30px,5vw,80px)}
+
+/* SEO answer block under the wordmark */
+.seo-answer{margin:22px 0 0;max-width:min(820px,100%);text-align:left}
+.seo-answer h2{font-size:16px;font-weight:700;color:var(--ink);margin:0 0 8px;line-height:1.45}
+.seo-answer p{font-size:14.5px;color:var(--ink-soft);line-height:1.65;margin:0 0 12px}
+.seo-answer p.seo-lbl{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px}
+.seo-tags{list-style:none;display:flex;flex-wrap:wrap;gap:6px;padding:0;margin:0}
+.seo-tags li{font-size:12px;font-weight:600;color:var(--ink-soft);background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:5px 9px}
+@media(max-width:1040px){
+  .seo-answer{margin-left:auto;margin-right:auto;text-align:center}
+  .seo-tags{justify-content:center}
+}
 `;
 
 const subDay = (d) => (d ? Number(String(d).slice(8, 10)) : null);
@@ -311,6 +337,23 @@ export default function HomeScreen({ onLaunch, onPrivacy }) {
     <>
       <style>{ACCOUNT_CSS}</style>
 
+      {/* SEO: structured data — mirrors the visible question/answer above the fold */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: [{
+            "@type": "Question",
+            name: "Where can I reduce tokens?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "less-tokens compresses prompts, system prompts, RAG chunks, retrieved context, tool and function definitions, context windows, chat history, few-shot examples, PDF and Word documents, agent scratchpads, JSON payloads, logs and stack traces, code comments, embedding inputs, and batch or eval datasets — cutting token count and API cost by 30–40% with no extra model calls, no training, and no GPU.",
+            },
+          }],
+        }) }}
+      />
+
       <nav className="nav">
         <div className="wrap nav-inner">
           <div className="brand"><span className="mk"><Zap size={15} /></span>less&#8202;tokens</div>
@@ -342,10 +385,30 @@ export default function HomeScreen({ onLaunch, onPrivacy }) {
               <h1 className="wordmark fade d1">less <span className="grad-text">tokens</span></h1>
               <p className="tagline fade d1">same detail&nbsp;·&nbsp;<b>less tokens</b>&nbsp;·&nbsp;<i>less cost</i></p>
               <p className="lede fade d2">
-                A tiny Python library that shrinks your LLM prompts by 30–40% before you send them —
-                stripping the filler, stopwords, and grammatical scaffolding the model never needed,
-                while keeping the answer essentially the same.
+                <b>less-tokens</b> is a Python package — <code>pip install less-tokens</code>.
+                You pay per token, and most of your prompt is words the model didn't need anyway.
+                One function call strips them before you hit send, so the same request costs
+                30–40% less and comes back with the same answer.
               </p>
+
+              {/* SEO: question heading + indexable list of compressible surfaces */}
+              <section className="seo-answer fade d2" aria-label="Where you can reduce tokens">
+                <h2>Where can I reduce tokens?</h2>
+                <ul className="seo-tags">
+                  <li>Prompts</li>
+                  <li>System prompts</li>
+                  <li>RAG chunks</li>
+                  <li>Retrieved context</li>
+                  <li>Tool &amp; function definitions</li>
+                  <li>Context windows</li>
+                  <li>Chat history</li>
+                  <li>Few-shot examples</li>
+                  <li>PDF &amp; Word documents</li>
+                  <li>Images</li>
+                  
+                </ul>
+              </section>
+
               <div className="cta-row fade d3">
                 <button className="btn btn-grad" onClick={onLaunch}>Try the live tester <ArrowRight size={18} /></button>
                 <div className="install">
@@ -563,6 +626,30 @@ export default function HomeScreen({ onLaunch, onPrivacy }) {
               <div className="ic"><GaugeCircle size={19} /></div>
               <h4><code>compare()</code></h4>
               <p>Six similarity metrics, including BERTScore, to prove the compressed answer still matches.</p>
+            </div>
+            <div className="feat fade">
+              <div className="ic"><Braces size={19} /></div>
+              <h4><code>compress_structured()</code></h4>
+              <p>For prompts that mix free instructions with parts you can't touch — a JSON output
+                schema, strict rules. The protected regions come out byte-for-byte identical.</p>
+            </div>
+            <div className="feat fade d1">
+              <div className="ic"><Wand2 size={19} /></div>
+              <h4><code>smart_compress()</code></h4>
+              <p>One chat message that mixes prose with code, tables, or URLs. Only the prose gets
+                compressed; everything else is left exactly as written.</p>
+            </div>
+            <div className="feat fade d2">
+              <div className="ic"><ScanLine size={19} /></div>
+              <h4><code>reduce_image_ocr()</code></h4>
+              <p>Your input is a PNG, JPG, or JPEG with text in it — pull the text out and send
+                characters instead of an image.</p>
+            </div>
+            <div className="feat fade d2">
+              <div className="ic"><ImageIcon size={19} /></div>
+              <h4><code>reduce_image_resize()</code></h4>
+              <p>An image you still need a multimodal model to see, shrunk down to fewer image
+                tokens before it goes over the wire.</p>
             </div>
           </div>
         </div>
