@@ -4,6 +4,7 @@ import {
   Scissors, Zap, Lightbulb, MessageSquare,
   Braces, ScanLine, Image as ImageIcon, Wand2,
   User, Mail, Lock, Phone, LogOut, X, Loader2, AlertCircle, Sparkles,
+  ScrollText,
 } from "lucide-react";
 import { REPO, PYPI, ISSUES, BAR_W } from "./shared.js";
 import {
@@ -202,6 +203,8 @@ const ACCOUNT_CSS = `
 .feats{display:grid !important;grid-template-columns:repeat(auto-fit,minmax(260px,1fr)) !important;gap:16px}
 .feats .feat h4{display:flex;align-items:center;gap:0}
 .feats .feat h4 code{word-break:break-word}
+.cards{grid-template-columns:repeat(3,1fr) !important}
+@media(max-width:900px){.cards{grid-template-columns:1fr !important}}
 
 /* full-width page: overrides the narrow .wrap from shared.js */
 .wrap{max-width:1680px !important;width:100% !important;
@@ -584,6 +587,20 @@ export default function HomeScreen({ onLaunch, onPrivacy }) {
                 <img src="https://img.shields.io/github/last-commit/shaminchokshi/less-tokens" alt="last commit" />
               </div>
               <span className="go">View on GitHub <ArrowRight size={15} /></span>
+            </a>
+
+            <a className="card" href="https://arxiv.org/abs/2609.13154" target="_blank" rel="noreferrer">
+              <div className="top">
+                <div className="ic b"><ScrollText size={21} /></div>
+                <div><h3>Research paper on arXiv</h3><div className="sub">arXiv:2609.13154</div></div>
+              </div>
+              <p>The paper less-tokens is built on - "Lexical Prompt Compression for Large Language Models: A Training-Free, Deterministic Pipeline with Empirical Pareto Analysis Across Eleven Task Categories". It describes the deterministic, training-free
+                approach behind the package. It walks through the compression techniques and how
+                their effect on answer quality is measured across different categories of prompts. Read it for the full method, or cite it.</p>
+              <div className="badges">
+                <img src="https://img.shields.io/badge/arXiv-2609.13154-b31b1b.svg" alt="arXiv" />
+              </div>
+              <span className="go">Read the paper <ArrowRight size={15} /></span>
             </a>
           </div>
         </div>

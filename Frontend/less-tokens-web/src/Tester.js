@@ -188,6 +188,19 @@ const ZONE_CSS = `
   .chat-area .cols{height:auto}
   .tester .col{min-height:60vh;height:auto}
 }
+
+/* key-secure badge + hover tooltip */
+.key-secure{position:relative;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink-soft);background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:6px 11px;white-space:nowrap;cursor:help;outline:none}
+.key-secure svg{color:var(--violet);flex-shrink:0}
+.key-tip{position:absolute;top:calc(100% + 8px);right:0;width:340px;background:var(--ink);color:#fff;font-size:12px;font-weight:400;line-height:1.55;white-space:normal;border-radius:10px;padding:10px 12px;box-shadow:0 14px 34px -14px rgba(21,21,46,.5);opacity:0;visibility:hidden;transform:translateY(-4px);transition:.15s;z-index:50}
+.key-secure:hover .key-tip,.key-secure:focus .key-tip{opacity:1;visibility:visible;transform:none}
+
+/* token count inline with the column title */
+.col-tok{display:inline-flex;align-items:baseline;gap:4px;margin-left:10px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;color:var(--muted)}
+.col-tok b{font-size:14px;font-weight:600;color:var(--violet)}
+
+/* single-line note */
+.note-line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 `;
 
 /* ── PDF / Word menu ─────────────────────────────────────────────────────────
@@ -826,19 +839,20 @@ export default function Tester({ onBack }) {
           <button className="back" onClick={onBack}><ChevronLeft size={18} /> back to home</button>
           <span className="brand" style={{ fontSize: 16 }}><span className="mk" style={{ width: 22, height: 22 }}><Zap size={12} /></span>tester</span>
           <div className="tkey">
+            <span className="key-secure" tabIndex={0}>
+              <ShieldCheck size={15} /> Your OpenAI key is secure
+              <span className="key-tip">
+                It is sent only to OpenAI to make the calls — never to us, never logged, never stored;
+                refresh the tab and it's gone. Message text and any uploaded files are sent to the
+                compression API to apply the techniques / extract the content, where they're processed
+                in memory and not saved.
+              </span>
+            </span>
             <input type="password" placeholder="sk-...  (your OpenAI key)" value={apiKey}
               onChange={(e) => setApiKey(e.target.value)} autoComplete="off" spellCheck={false} />
             <button className="btn btn-ghost btn-sm" onClick={reset}><RotateCcw size={14} /> reset</button>
           </div>
         </div>
-      </div>
-
-      <div className="disclaimer">
-        <ShieldCheck size={20} className="sh" />
-        <span><b>Your OpenAI key stays in your browser.</b> It is sent only to OpenAI to make the calls —
-          never to us, never logged, never stored; refresh the tab and it's gone. Message text and any uploaded
-          files are sent to the compression API to apply the techniques / extract the content, where they're
-          processed in memory and not saved.</span>
       </div>
 
       <div className="tools">
@@ -847,17 +861,10 @@ export default function Tester({ onBack }) {
           <span className="sd" /> backend {backendUp === null ? "…" : backendUp ? "online" : "offline"}
         </span>
       </div>
-      <p className="note">
-        Each typed message is run through <code>smart_compress()</code> on the FastAPI backend (powered by the
-        real <code>less-tokens</code> package), so code blocks, tables, URLs and math survive intact.
-        Negations and question words are always protected. <b>Your typed prompt is always compressed</b>, even when
-        files are attached. Attach as many files as you like — each one asks how it should go out.
-        Documents are scraped with <code>reduce_document()</code>, text-rich images with <code>reduce_image_ocr()</code>,
-        and every scrape lands in a <b>.md file</b> you can download from its chip. Images you need the model to
-        actually look at can be shrunk with <code>reduce_image_resize()</code> instead. Scraped text drops into the
-        compressed side <b>as-is</b> — tap <b>compress further</b> on an attachment to also smart-compress it.
-        Switch to <b>Structured</b> below to compress per-zone with <code>compress_structured()</code>.
-        Model: <code>{MODEL}</code>.
+      <p className="note note-line">
+        Prompts → <code>smart_compress()</code> (code, tables, URLs kept) · Docs → <code>reduce_document()</code> ·
+        Text images → <code>reduce_image_ocr()</code> · Visual images → <code>reduce_image_resize()</code> ·
+        Scrapes download as .md · Structured → <code>compress_structured()</code> · Model <code>{MODEL}</code>
       </p>
 
       <div className="work">
@@ -889,9 +896,10 @@ export default function Tester({ onBack }) {
 
           <div className="cols">
             <section className="col raw">
-              <div className="col-head"><div className="col-title"><span className="cdot" />raw context</div></div>
-              <div className="stats">
-                <div className="stat t"><div className="n">{fmt(tok.nin)}</div><div className="k">input tokens</div></div>
+              <div className="col-head">
+                <div className="col-title"><span className="cdot" />raw context
+                  <span className="col-tok"><b>{fmt(tok.nin)}</b> input tokens</span>
+                </div>
               </div>
               <div className="stream" ref={nRef}>
                 <Bubbles list={normal} kind="raw" />
@@ -901,11 +909,10 @@ export default function Tester({ onBack }) {
 
             <section className="col cmp">
               <div className="col-head">
-                <div className="col-title"><span className="cdot" />compressed context</div>
+                <div className="col-title"><span className="cdot" />compressed context
+                  <span className="col-tok"><b>{fmt(tok.cin)}</b> input tokens</span>
+                </div>
                 <span className="saved" title="input tokens vs raw context">{saved >= 0 ? "−" : "+"}{Math.abs(saved)}%</span>
-              </div>
-              <div className="stats">
-                <div className="stat t"><div className="n">{fmt(tok.cin)}</div><div className="k">input tokens</div></div>
               </div>
               <div className="stream" ref={cRef}>
                 <Bubbles list={comp} kind="cmp" />
