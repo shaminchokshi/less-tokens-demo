@@ -18,6 +18,10 @@
   if (window.__lessTokensLoaded) return;
   window.__lessTokensLoaded = true;
 
+  // M365 Copilot is injected with all_frames:true, so skip frames too small to
+  // ever hold a composer — otherwise idle iframes each spawn their own blip.
+  if (window.top !== window && (innerWidth < 320 || innerHeight < 220)) return;
+
   const send = (msg) => new Promise((res) => chrome.runtime.sendMessage(msg, res));
 
   // ── constants ───────────────────────────────────────────────────────────────
@@ -45,6 +49,10 @@
   const IMG_EXT = ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "heic"];
   const DOC_EXT = ["pdf", "doc", "docx", "rtf", "odt"];
 
+  // Long-edge presets for the resize option. 512 matches the backend's
+  // /reduce_image_resize default.
+  const RESIZE_DEFAULT = 512;
+
   // ── site adapters: prompt box + send button per host ─────────────────────────
   const SITES = [
     {
@@ -63,9 +71,12 @@
       sendSel: 'button.send-button, button[aria-label*="Send"]',
     },
     {
-      re: /copilot\.microsoft\.com|m365\.cloud\.microsoft/,
-      sel: 'textarea#userInput, textarea[data-testid="composer-input"], div[contenteditable="true"]',
-      sendSel: 'button[data-testid="submit-button"], button[aria-label*="Submit"], button[title*="Submit"]',
+      // M365 Copilot keeps its composer and send button inside shadow roots,
+      // so this adapter is marked deep — see deepQuery below.
+      re: /copilot\.microsoft\.com|m365\.cloud\.microsoft|cloud\.microsoft|microsoft365\.com/,
+      deep: true,
+      sel: '#m365-chat-editor-target-element, div[data-testid="chat-input-box"] div[contenteditable="true"], textarea#userInput, textarea[data-testid="composer-input"], div[role="textbox"][contenteditable="true"], div[contenteditable="true"]',
+      sendSel: 'button[data-testid="submit-button"], button[data-testid="send-button"], button[aria-label*="Send"], button[title*="Send"], button[aria-label*="Submit"], button[title*="Submit"]',
     },
     {
       re: /bing\.com/,
@@ -85,12 +96,57 @@
   ];
   const site = () => SITES.find((s) => s.re.test(location.hostname)) || null;
 
+  // M365 needs a more forgiving key path than the other sites — see
+  // onKeyDownDeep. Set localStorage.lt_debug = "1" and reload to trace it.
+  const DEEP = !!(site() && site().deep);
+  const DEBUG = (() => { try { return localStorage.getItem("lt_debug") === "1"; } catch { return false; } })();
+  const dbg = (...a) => { if (DEBUG) console.log("%c[lesstokens]", "color:#7c6cff;font-weight:700", ...a); };
+  dbg("loaded", location.href, "| top frame:", window.top === window, "| deep:", DEEP);
+
+  // ── shadow-DOM piercing (M365 Copilot) ──────────────────────────────────────
+  // document.querySelector stops at a shadow boundary, so walk every open
+  // shadow root too. Only used on adapters marked deep:true.
+  function deepQueryAll(selector, r = document, out = [], depth = 0) {
+    if (depth > 12) return out;
+    try { out.push(...r.querySelectorAll(selector)); } catch {}
+    for (const el of r.querySelectorAll("*")) {
+      if (el.shadowRoot) deepQueryAll(selector, el.shadowRoot, out, depth + 1);
+    }
+    return out;
+  }
+  function deepQuery(selectorList, test) {
+    for (const sel of selectorList.split(",")) {
+      for (const el of deepQueryAll(sel.trim())) if (!test || test(el)) return el;
+    }
+    return null;
+  }
+  // activeElement, followed down through nested shadow roots.
+  function deepActive(node = document) {
+    let a = node.activeElement;
+    while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+    return a;
+  }
+  // The deep walk is expensive and findInput runs on every frame, so hold on to
+  // the composer until it's actually detached.
+  let deepInputCache = null;
+  function deepInput(s) {
+    if (deepInputCache && deepInputCache.isConnected && visible(deepInputCache)) return deepInputCache;
+    deepInputCache = deepQuery(s.sel, (el) => isEditable(el) && visible(el));
+    return deepInputCache;
+  }
+
   function findInput() {
     const s = site();
     if (s) {
       for (const sel of s.sel.split(",")) {
         const el = visible(document.querySelector(sel.trim()));
         if (el) return el;
+      }
+      if (s.deep) {
+        const d = deepInput(s);
+        if (d) return d;
+        const act = deepActive();
+        if (act && isEditable(act) && visible(act)) return act;
       }
     }
     const a = document.activeElement;
@@ -105,6 +161,12 @@
     for (const sel of s.sendSel.split(",")) {
       const el = document.querySelector(sel.trim());
       if (el && !el.disabled && el.offsetParent !== null) return el;
+    }
+    if (s.deep) {
+      return deepQuery(s.sendSel, (el) =>
+        !el.disabled &&
+        el.getAttribute("aria-disabled") !== "true" &&
+        el.getBoundingClientRect().width > 0);
     }
     return null;
   }
@@ -129,7 +191,9 @@
       Object.getOwnPropertyDescriptor(proto, "value").set.call(el, text);
       el.dispatchEvent(new Event("input", { bubbles: true }));
     } else {
-      const selc = window.getSelection();
+      // A node inside a shadow root belongs to that root's selection.
+      const rootNode = el.getRootNode?.();
+      const selc = (rootNode && rootNode.getSelection ? rootNode.getSelection() : null) || window.getSelection();
       selc.removeAllRanges();
       const range = document.createRange();
       range.selectNodeContents(el);
@@ -148,6 +212,194 @@
       selc.removeAllRanges();
       selc.addRange(end);
     }
+  }
+
+  // Fluent/Lexical-style editors (M365's <span role="textbox">) keep their own
+  // document model and quietly revert a plain execCommand write. Try several
+  // routes and verify after each, so we never send believing a write landed
+  // when it didn't.
+  function selectAllIn(el) {
+    el.focus();
+    const rootNode = el.getRootNode?.();
+    const sel = (rootNode && rootNode.getSelection ? rootNode.getSelection() : null) || window.getSelection();
+    sel.removeAllRanges();
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    sel.addRange(r);
+    return sel;
+  }
+
+  // Put the editor in the state a real click leaves it in. After the backend
+  // round-trip the composer may have re-rendered or lost focus, and
+  // execCommand only acts on the focused editable.
+  function focusDeep(el) {
+    try {
+      if (document.activeElement !== el) {
+        const base = { bubbles: true, cancelable: true, view: window, button: 0 };
+        for (const t of ["pointerdown", "mousedown", "mouseup", "click"]) {
+          const isP = t.startsWith("pointer");
+          const Ctor = isP && window.PointerEvent ? PointerEvent : MouseEvent;
+          const ev = new Ctor(t, isP
+            ? { ...base, pointerId: 1, pointerType: "mouse", isPrimary: true }
+            : base);
+          Object.defineProperty(ev, "__lt", { value: true });
+          el.dispatchEvent(ev);
+        }
+      }
+    } catch {}
+    try { el.focus(); } catch {}
+  }
+
+  const selectionIn = (el) => {
+    const rootNode = el.getRootNode?.();
+    return (rootNode && rootNode.getSelection ? rootNode.getSelection() : null) || window.getSelection();
+  };
+
+  // Select the editor's whole contents. execCommand("selectAll") on the focused
+  // editable is what these editors actually honour — a hand-built Range gets
+  // discarded when the editor restores its own selection, which is why an
+  // insert then landed at the caret and prepended instead of replacing.
+  // Returns how many characters ended up selected, which is the fact that
+  // tells us whether a clear can possibly work.
+  function selectAllDeep(el) {
+    focusDeep(el);
+    let ok = false;
+    try { ok = document.execCommand("selectAll"); } catch { ok = false; }
+    let n = (selectionIn(el).toString() || "").length;
+    if (!n) { selectAllIn(el); n = (selectionIn(el).toString() || "").length; }
+    return { ok, n };
+  }
+
+  const activeName = () => {
+    const a = document.activeElement;
+    return a ? (a.id || a.getAttribute?.("aria-label") || a.tagName) : "none";
+  };
+
+  // Lexical (data-lexical-editor on M365's span) applies an edit to its model
+  // and re-renders on a later tick, so the DOM read straight after an
+  // execCommand still shows the old text. Everything below therefore polls for
+  // the expected state instead of reading once.
+  const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function waitUntil(test, ms = 500) {
+    const deadline = Date.now() + ms;
+    for (;;) {
+      if (test()) return true;
+      if (Date.now() > deadline) return false;
+      await nap(40);
+    }
+  }
+
+  function pasteDeep(el, text) {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", text);
+    const ev = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+    Object.defineProperty(ev, "__ltPass", { value: true });
+    Object.defineProperty(ev, "__lt", { value: true });
+    return el.dispatchEvent(ev);
+  }
+
+  async function emptyDeep(el) {
+    // Kept only for the panel's own use; the send path replaces the selection
+    // with a paste instead of clearing first.
+    const sel = selectAllDeep(el);
+    pasteDeep(el, "");
+    const ok = await waitUntil(() => !readInput(el).trim(), 1200);
+    dbg("clear", ok ? "✓" : "✗", "| selected:", sel.n);
+    return ok;
+  }
+
+  // Compare ignoring things the editor legitimately rewrites: whitespace shape,
+  // and zero-width / invisible characters (ZWSP, ZWNJ, BOM, soft hyphen), which
+  // Lexical strips on paste. Without stripping these, a write that visibly
+  // succeeded compares as a failure.
+  const norm = (s) => (s || "")
+    .replace(/[\u200b-\u200f\u2060\ufeff\u00ad]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const sameText = (a, b) => norm(a) === norm(b);
+  // Last-resort comparison: same letters and digits, in the same order. If this
+  // matches, the text in the box is the text we meant to put there.
+  const loose = (s) => norm(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  function firstDiff(a, b) {
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) {
+      if (a[i] !== b[i]) {
+        return `index ${i}: box U+${a.charCodeAt(i).toString(16).padStart(4, "0")}` +
+          ` vs wanted U+${b.charCodeAt(i).toString(16).padStart(4, "0")}`;
+      }
+    }
+    return a.length === b.length ? "identical" : `lengths differ: ${a.length} vs ${b.length}`;
+  }
+
+  async function writeInputDeep(box, text, original) {
+    // Re-resolve: the composer can be re-rendered during the backend call, and
+    // writing to a detached node silently does nothing.
+    let el = box && box.isConnected ? box : findInput();
+    if (!el) { dbg("write ✗ composer vanished"); return { ok: false, dirty: false }; }
+    if (el !== box) dbg("composer was re-created during compression — using the new one");
+
+    // Select-all then paste — literally what Ctrl+A, Ctrl+V does. The editor
+    // handles the paste itself (it calls preventDefault on it), so its internal
+    // model updates properly and the selection is replaced in one operation.
+    // No clearing step: paste replaces the selection, and a separate clear was
+    // only ever a way to corrupt the box when it half-worked.
+    const put = async (value, ms) => {
+      const sel = selectAllDeep(el);
+      await nap(30);
+      const handled = !pasteDeep(el, value);   // dispatchEvent false ⇒ preventDefault ⇒ editor took it
+      let ok = await waitUntil(() => sameText(readInput(el), value), ms);
+      const got = readInput(el);
+      if (!ok && loose(got) === loose(value) && loose(value)) {
+        ok = true;
+        dbg("accepted on loose match —", firstDiff(norm(got), norm(value)));
+      }
+      dbg("paste", ok ? "✓" : "✗", "| selected:", sel.n, "chars | editor handled:", handled,
+        "| active:", activeName(),
+        "| box:", JSON.stringify(got.trim().slice(0, 100)));
+      if (!ok) dbg("mismatch —", firstDiff(norm(got), norm(value)));
+      return ok;
+    };
+
+    // Lexical reconciles on its own schedule and can take well over half a
+    // second, so wait properly rather than declaring failure and retrying —
+    // retrying is what produced the duplicated prompts.
+    if (await put(text, 2500)) {
+      dbg("write ✓ via paste");
+      caretToEnd(el);
+      return { ok: true, dirty: false };
+    }
+
+    // One fallback, still replacing the whole selection rather than inserting.
+    selectAllDeep(el);
+    try { document.execCommand("insertText", false, text); } catch {}
+    if (await waitUntil(() => sameText(readInput(el), text), 1500)) {
+      dbg("write ✓ via execCommand insertText");
+      caretToEnd(el);
+      return { ok: true, dirty: false };
+    }
+
+    // Put back exactly what was typed so nothing half-written gets sent.
+    dbg("restoring the original text");
+    await put(original || "", 1500);
+    caretToEnd(el);
+    const now = readInput(el);
+    const dirty = !sameText(now, original || "");
+    dbg(dirty ? "couldn't restore — box left as:" : "original restored:", JSON.stringify(now.trim().slice(0, 80)));
+    return { ok: false, dirty };
+  }
+
+  // Park the caret at the end so the site's send logic sees a normal state.
+  function caretToEnd(el) {
+    try {
+      const rootNode = el.getRootNode?.();
+      const sel = (rootNode && rootNode.getSelection ? rootNode.getSelection() : null) || window.getSelection();
+      const end = document.createRange();
+      end.selectNodeContents(el);
+      end.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(end);
+    } catch {}
   }
 
   // ── shared state ────────────────────────────────────────────────────────────
@@ -189,13 +441,41 @@
   let sending = false;
   let lastCompressed = "";   // if the box still holds this, don't re-compress it
 
-  // Enter.
-  document.addEventListener("keydown", onKeyDown, true);
+  // Enter. Registered on window AND document, in capture: capture runs
+  // window → document → target, and listeners on one target fire in
+  // registration order, so with run_at:document_start this puts us ahead of
+  // anything the page attaches. Whichever fires first and intercepts calls
+  // stopImmediatePropagation, so the other never double-handles.
+  const keyHandler = DEEP ? onKeyDownDeep : onKeyDown;
+  window.addEventListener("keydown", keyHandler, true);
+  document.addEventListener("keydown", keyHandler, true);
 
   // The send button. Sites variously commit on pointerdown, on mousedown or on
   // click, so we swallow the whole gesture and replay it after compressing.
   ["pointerdown", "mousedown", "mouseup", "click"].forEach((t) =>
-    document.addEventListener(t, onSendPointer, true));
+    window.addEventListener(t, onSendPointer, true));
+
+  // M365's editor can commit on beforeinput rather than keydown. Block the
+  // paragraph break while a compression is in flight so no stray submit slips
+  // out between reading the box and writing the compressed text back.
+  if (DEEP) window.addEventListener("beforeinput", onBeforeInput, true);
+  function onBeforeInput(e) {
+    if (e.__lt || !sending) return;
+    if (e.inputType !== "insertParagraph") return;    // shift+enter stays free
+    dbg("blocked beforeinput while compressing");
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+
+  // Attach straight to the composer too, in case the page swallows the event
+  // before it reaches window in some frame arrangement. Idempotent; called
+  // from positionLauncher as the composer is re-created.
+  function armComposer(el) {
+    if (!DEEP || !el || el.__ltArmed) return;
+    el.__ltArmed = true;
+    el.addEventListener("keydown", keyHandler, true);
+    dbg("armed composer", el);
+  }
 
   // Shared preconditions for intercepting anything.
   function ready(el) {
@@ -206,11 +486,22 @@
 
   function onKeyDown(e) {
     if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.__lt) return;
-    if (hostContains(e.target)) return;                  // our own panel
-    const el = e.target;
-    if (!isEditable(el) || !ready(el)) return;
+    if (hostContains(e.target) || inOwnUI(e)) return;     // our own panel
+
+    // Inside a shadow root e.target is the host, not the editor, so take the
+    // first editable node on the composed path instead (M365 Copilot).
+    const path = e.composedPath ? e.composedPath() : [];
+    let el = path.find((n) => n && n.nodeType === 1 && isEditable(n));
+    if (!el) {
+      const act = deepActive();
+      if (act && isEditable(act)) el = act;
+    }
+    if (!el && isEditable(e.target)) el = e.target;
+    if (!el || !ready(el)) return;
+
     const box = findInput();
-    if (box && el !== box && !box.contains(el)) return;
+    // contains() also stops at a shadow boundary — the path covers that case.
+    if (box && el !== box && !box.contains(el) && !path.includes(box)) return;
     if (!readInput(el).trim()) return;
 
     e.preventDefault();
@@ -218,12 +509,47 @@
     compressThenSend(el);
   }
 
+  // M365 Copilot only. The strict handler above has to identify the editor from
+  // the event, which is where it kept failing — retargeted targets, wrapper
+  // elements, a box that isn't the node the key landed on. This one asks a
+  // simpler question: is there a composer with text in it, and did this Enter
+  // plausibly come from it? If so, intercept and operate on the composer
+  // itself rather than on whatever the event pointed at.
+  function onKeyDownDeep(e) {
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.__lt) return;
+    if (hostContains(e.target) || inOwnUI(e)) return;
+
+    const box = findInput();
+    if (!box) return dbg("bail: no composer found");
+
+    const path = e.composedPath ? e.composedPath() : [];
+    const near =
+      path.includes(box) ||
+      box.contains(e.target) ||
+      deepActive() === box ||
+      path.some((n) => n && n.nodeType === 1 && isEditable(n));
+    if (!near) return dbg("bail: Enter not from the composer", e.target);
+
+    if (!state.autoCompress) return dbg("bail: 'Compress before sending' is off");
+    if (sending) return dbg("bail: a send is already in flight");
+    if (!state.user) return dbg("bail: not signed in");
+    if (!state.healthOk) return dbg("bail: backend offline");
+
+    const text = readInput(box).trim();
+    if (!text) return dbg("bail: composer reads empty", box);
+
+    dbg("intercepting Enter ✓", text.slice(0, 60));
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    compressThenSend(box);
+  }
+
   function onSendPointer(e) {
     if (e.__lt) return;
     // Ignore anything inside our own UI. Shadow-DOM retargeting rewrites
     // e.target to the host, so also check the composed path for our roots.
     if (hostContains(e.target) || inOwnUI(e)) return;
-    if (!sendButtonFor(e.target)) return;                // not the send button
+    if (!sendButtonFor(e.target, e)) return;             // not the send button
     const el = findInput();
     if (!ready(el) || !readInput(el).trim()) return;      // empty box: let it through
 
@@ -244,13 +570,24 @@
   }
 
   // Did this event land on (or inside) the site's send button?
-  function sendButtonFor(node) {
+  function sendButtonFor(node, e) {
     const s = site();
-    if (!s || !node) return null;
-    const el = node.nodeType === 1 ? node : node.parentElement;
+    if (!s) return null;
+    const sels = s.sendSel.split(",").map((x) => x.trim());
+    // Shadow hosts retarget node, so check every element in the gesture's path.
+    const path = e && e.composedPath ? e.composedPath() : [];
+    for (const n of path) {
+      if (!n || n.nodeType !== 1) continue;
+      for (const sel of sels) {
+        if (n.matches?.(sel)) return n;
+        const hit = n.closest?.(sel);
+        if (hit) return hit;
+      }
+    }
+    const el = node && node.nodeType === 1 ? node : node?.parentElement;
     if (!el || !el.closest) return null;
-    for (const sel of s.sendSel.split(",")) {
-      const hit = el.closest(sel.trim());
+    for (const sel of sels) {
+      const hit = el.closest(sel);
       if (hit) return hit;
     }
     return null;
@@ -260,6 +597,7 @@
   async function compressThenSend(el) {
     sending = true;
     const text = readInput(el).trim();
+    let settleFor = null;   // what the box should end up holding, if anything
 
     // Already compressed (retry after a failed send, or inserted from the
     // panel) — send it straight through rather than compressing twice.
@@ -276,18 +614,65 @@
       });
       if (r && r.ok && r.compressed && r.compressed.trim()) {
         const before = estTokens(text), after = estTokens(r.compressed);
-        writeInput(el, r.compressed);
-        lastCompressed = r.compressed;
+        dbg("compressed:", JSON.stringify(r.compressed.slice(0, 80)), `| ${before} → ${after} tok`);
+        const res = DEEP
+          ? await writeInputDeep(el, r.compressed, text)
+          : (writeInput(el, r.compressed), { ok: true, dirty: false });
+        if (res.ok) { lastCompressed = r.compressed; settleFor = r.compressed; }
         recordSaving(text, r.compressed);
-        toast(`${Math.max(0, Math.round((1 - after / before) * 100))}% fewer tokens · sending`, "ok");
+        if (res.dirty) {
+          // The box holds neither the compressed text nor what you typed.
+          // Sending that would be worse than not sending at all.
+          dbg("leaving the box alone — not sending");
+          toast("Couldn't rewrite the box — check it before sending", "warn");
+          sending = false;
+          return;
+        }
+        if (!res.ok) {
+          dbg("every write strategy failed — the editor is rejecting programmatic input");
+          toast("Couldn't write into the box — sending original", "warn");
+        } else {
+          toast(`${Math.max(0, Math.round((1 - after / before) * 100))}% fewer tokens · sending`, "ok");
+        }
       } else {
+        dbg("compress failed:", r && r.error ? r.error : r);
         toast(r && r.error ? "Compression failed — sending original" : "Sending original", "warn");
       }
-    } catch {
+    } catch (err) {
+      dbg("compress threw:", err);
       toast("Compression failed — sending original", "warn");
     }
     // Give the site's framework a tick to register the new value, then send.
-    setTimeout(() => { fireSend(el); sending = false; }, 90);
+    const s = site();
+    if (s && s.deep) {
+      await settleThenSend(el, settleFor);
+      sending = false;
+    } else {
+      setTimeout(() => { fireSend(el); sending = false; }, 90);
+    }
+  }
+
+  // Poll until the box really contains the compressed text (M365's composer
+  // commits asynchronously and keeps its send button disabled until it does),
+  // then fire. Gives up after ~800 ms and sends anyway rather than stranding
+  // the prompt.
+  function settleThenSend(el, expected) {
+    return new Promise((resolve) => {
+      const deadline = Date.now() + 1500;
+      const tick = () => {
+        const target = findInput() || el;
+        const now = readInput(target).trim();
+        const settled = !expected || sameText(now, expected);
+        if (settled || Date.now() > deadline) {
+          dbg(settled ? "box settled — firing send" : "timed out waiting for the box; firing anyway",
+            "| box:", JSON.stringify(now.slice(0, 80)));
+          fireSend(target);
+          return resolve();
+        }
+        setTimeout(tick, 60);
+      };
+      setTimeout(tick, 60);
+    });
   }
 
   function fireSend(el) {
@@ -298,7 +683,8 @@
     // Fallback: synthesize Enter, marked so we don't intercept our own event.
     ["keydown", "keypress", "keyup"].forEach((type) => {
       const ev = new KeyboardEvent(type, {
-        key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true,
+        key: "Enter", code: "Enter", keyCode: 13, which: 13,
+        bubbles: true, cancelable: true, composed: true,
       });
       Object.defineProperty(ev, "__lt", { value: true });
       el.dispatchEvent(ev);
@@ -388,7 +774,9 @@
     const dt = new DataTransfer();
     files.forEach((f) => dt.items.add(f));
 
-    const input = document.querySelector('input[type="file"]');
+    const s = site();
+    const input = document.querySelector('input[type="file"]') ||
+      (s && s.deep ? deepQuery('input[type="file"]') : null);
     if (input) {
       input.__ltPass = true;
       input.files = dt.files;
@@ -420,6 +808,20 @@
   async function handleImage(file) {
     const choice = await askImage(file);
     if (choice.mode === "asis") return file;
+
+    // Resize: keep it an image, just make it cheaper. A vision model bills by
+    // tile area, so capping the long edge cuts the cost without losing the
+    // picture. Done here with a canvas so it needs no backend round-trip.
+    if (choice.mode === "resize") {
+      toast(`Resizing ${file.name}…`, "busy");
+      const out = await resizeImage(file, choice.longEdge);
+      if (!out.changed) {
+        toast(`${file.name} is already ${out.w}×${out.h} — sending as is`, "ok");
+        return file;
+      }
+      toast(`${file.name} → ${out.w}×${out.h} (${fmtSize(out.file.size)})`, "ok");
+      return out.file;
+    }
 
     toast(`OCR’ing ${file.name}…`, "busy");
     const base64 = await fileToB64(file);
@@ -464,6 +866,48 @@
     return new File([text], `${base}.${suffix}.md`, { type: "text/markdown", lastModified: Date.now() });
   }
 
+  // Scale an image so its long edge is at most longEdge px, in the page itself.
+  // Mirrors the backend's /reduce_image_resize (same default, same "long edge"
+  // rule) but needs no upload, so it works the moment the modal closes.
+  async function resizeImage(file, longEdge) {
+    const max = Number(longEdge) || RESIZE_DEFAULT;
+    let bmp;
+    try {
+      bmp = await createImageBitmap(file);
+    } catch {
+      throw new Error("this image format can't be resized in the browser");
+    }
+    const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    if (scale >= 1) {
+      const w = bmp.width, h = bmp.height;
+      bmp.close?.();
+      return { file, w, h, changed: false };     // already small enough
+    }
+    const w = Math.max(1, Math.round(bmp.width * scale));
+    const h = Math.max(1, Math.round(bmp.height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(bmp, 0, 0, w, h);
+    bmp.close?.();
+
+    // Keep JPEG as JPEG (photos stay small); everything else becomes PNG so
+    // screenshots and diagrams keep their sharp edges and any transparency.
+    const jpeg = /jpe?g/i.test(file.type) || /jpe?g$/i.test(extOf(file.name));
+    const type = jpeg ? "image/jpeg" : "image/png";
+    const blob = await new Promise((res, rej) =>
+      canvas.toBlob((b) => (b ? res(b) : rej(new Error("resize failed"))), type, 0.9));
+
+    const base = file.name.replace(/\.[^.]+$/, "");
+    const out = new File([blob], `${base}.${w}x${h}.${jpeg ? "jpg" : "png"}`,
+      { type, lastModified: Date.now() });
+    return { file: out, w, h, changed: true };
+  }
+
   function fileToB64(file) {
     return new Promise((res, rej) => {
       const r = new FileReader();
@@ -498,14 +942,29 @@
         <p class="fn">${esc(file.name)} · ${fmtSize(file.size)}</p></div></div>
       <p class="bd">If the image is <b>text-rich</b> — a screenshot, a scan, a slide — OCR turns it into plain
       text, which costs a fraction of the tokens an image does. If the <b>picture itself</b> matters
-      (a diagram to look at, a photo, a UI to critique), send it untouched.</p>
+      (a diagram to look at, a photo, a UI to critique), resize it: vision models bill by tile area,
+      so a smaller image is cheaper while still being an image. Send it untouched only when full
+      detail matters.</p>
       <label class="chk"><input type="checkbox" id="further"/> Also compress the OCR’d text</label>
+      <label class="row" for="edge">Resize to a long edge of
+        <select id="edge">
+          <option value="384">384 px</option>
+          <option value="512" selected>512 px</option>
+          <option value="768">768 px</option>
+          <option value="1024">1024 px</option>
+        </select>
+      </label>
       <div class="act">
         <button class="btn primary" id="ocr">OCR to text</button>
+        <button class="btn" id="resize">Resize the image</button>
         <button class="btn" id="asis">Send the image as is</button>
       </div>`,
       (r, close) => {
         r.getElementById("ocr").onclick = () => close({ mode: "ocr", further: r.getElementById("further").checked });
+        r.getElementById("resize").onclick = () => close({
+          mode: "resize",
+          longEdge: parseInt(r.getElementById("edge").value, 10) || RESIZE_DEFAULT,
+        });
         r.getElementById("asis").onclick = () => close({ mode: "asis" });
         r.querySelector(".ov").onclick = (e) => { if (e.target === r.querySelector(".ov")) close({ mode: "asis" }); };
       });
@@ -551,6 +1010,10 @@
     .bd{font-size:13.5px;line-height:1.6;color:#4a4e63;margin:0 0 14px}
     .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:#4a4e63;margin:0 0 8px;cursor:pointer}
     .chk input{width:15px;height:15px;accent-color:#7c6cff}
+    .row{display:flex;align-items:center;gap:8px;font-size:13px;color:#4a4e63;margin:0 0 8px}
+    .row select{border:1px solid #e2e3ee;border-radius:8px;padding:5px 8px;font:inherit;font-size:12.5px;
+                background:#fff;color:#1c2030;cursor:pointer;outline:none}
+    .row select:focus{border-color:#7c6cff}
     .act{display:flex;gap:9px;margin-top:16px;flex-wrap:wrap}
     .btn{flex:1;min-width:150px;padding:11px 14px;border-radius:11px;border:1px solid #e2e3ee;background:#fff;
          color:#1c2030;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;transition:.14s}
@@ -559,8 +1022,9 @@
     .btn.primary:hover{filter:brightness(1.05)}
     @media(prefers-color-scheme:dark){
       .mo{background:#1e1f27;color:#e8e8ef}
-      .bd,.chk{color:#b6b8c8}
+      .bd,.chk,.row{color:#b6b8c8}
       .btn{background:#26272f;color:#e8e8ef;border-color:#3a3b46}
+      .row select{background:#26272f;color:#e8e8ef;border-color:#3a3b46}
     }`;
 
   // ── toast ───────────────────────────────────────────────────────────────────
@@ -631,6 +1095,7 @@
   let inputEl = null;
   function positionLauncher() {
     inputEl = findInput();
+    armComposer(inputEl);
     if (!inputEl) { launcher.style.display = "none"; return; }
     const r = inputEl.getBoundingClientRect();
     launcher.style.display = "inline-flex";
@@ -778,7 +1243,12 @@
       lastCompressed = out;   // send as-is, don't re-compress
       // Let the site register the new value, then fire its send.
       sending = true;
-      setTimeout(() => { fireSend(el); sending = false; }, 120);
+      const s = site();
+      if (s && s.deep) {
+        settleThenSend(el, out).then(() => { sending = false; });
+      } else {
+        setTimeout(() => { fireSend(el); sending = false; }, 120);
+      }
     }, 60);
   };
 
